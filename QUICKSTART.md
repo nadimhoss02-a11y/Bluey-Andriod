@@ -96,7 +96,7 @@ Pick ONE route below.
 2. Talk (up to ~10 seconds). She shows a listening glow.
 3. Press Alt+Space again or just wait — she answers.
    - **Without an API key:** she reacts playfully to your voice (offline personality).
-   - **With an OpenAI key (Settings → Brain):** she truly transcribes and understands you.
+   - **With a free Google Gemini key or an OpenAI key (Settings → Brain):** she truly transcribes and understands you.
 
 ### Way 3: Wake word — "Hey Bluey" (hands-free, new in v1.1)
 
@@ -118,7 +118,9 @@ Pick ONE route below.
 ### Way 4: From your phone
 
 1. On Windows: tray icon → **Settings** → note the **PC IP address** and **6-digit code**
-   (keep the code private; if Windows Firewall asks, allow **Private networks only**).
+   (keep the code private; if Windows Firewall asks, allow **Private networks only** - and if your
+   Wi-Fi is a phone hotspot Windows calls it *Public*: set it to **Private** first under
+   Windows Settings → Network & Internet → Wi-Fi, otherwise the phone times out).
 2. On Android: open Bluey → **Pair with PC** → pick your PC from the list
    (or type the IP) → enter the code. Same Wi-Fi required.
 3. Talk to her three ways:
@@ -126,16 +128,19 @@ Pick ONE route below.
    - **"Hey Bluey" chip** (top of screen) — tap it to switch on always-listening.
      While the app is open she hears her name and answers hands-free.
      Works standalone (offline brain) or forwards your words to the PC when paired.
-   - **Hold the mic button** — records audio straight to the PC (Whisper when paired).
+   - **Hold the mic button** — records audio straight to the PC (understood by Gemini/Whisper when you added a key).
 4. Chat text and quick command buttons work from the phone too.
 
 ---
 
 ## Part 3 — Optional upgrades
 
-- **Smarter brain:** Settings → **Brain** → select **OpenAI** → paste your API key →
-  Save. Push-to-talk and wake word become real conversations powered by Whisper + GPT
-  with full PC control. The key stays on your PC.
+- **Smarter brain, free:** get a key at https://aistudio.google.com/apikey (Google account,
+  no card) → Settings → **Brain** → select **Google Gemini** → paste the key → Save. Chat and
+  push-to-talk become real conversations with full PC control. The key stays on your PC. Free-tier
+  note: Google may use your messages to improve its products, and there are daily limits.
+- **Or OpenAI:** Settings → **Brain** → **OpenAI** → paste your API key → Save. Push-to-talk and
+  wake word become real conversations powered by Whisper + GPT.
 - **Character tuning:** Settings → size, glow, mood (happy / excitable / sleepy / grumpy),
   idle chatter, voice selection and volume.
 

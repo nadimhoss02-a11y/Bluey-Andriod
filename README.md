@@ -23,15 +23,16 @@
 | 🎙 Push-to-talk | ✅ `Alt+Space` | ✅ hold the mic button |
 | 🗣 Wake word "Hey Bluey" | ✅ hands-free with an OpenAI key (or your own Google API key) | ✅ always-listening while the app is open |
 | 👆 Tap the character to talk | ✅ double-click the berry | ✅ tap the berry (original Bluey style) |
-| 🤖 AI voice chat | ✅ offline personality now · paste an OpenAI key to upgrade | ✅ sends audio to the PC when paired |
+| 🤖 AI voice chat | ✅ offline personality now · paste a **free Google Gemini key** (or an OpenAI key) to upgrade | ✅ sends text and audio to the PC when paired |
 | 🖱 PC control (click / type / scroll / open apps) | ✅ via chat commands | ✅ from your phone |
 | 📝 Meeting notes (5-min audio chunks) | ✅ saved to `Documents\Bluey Notes` | — |
 | 📱 Phone companion over Wi-Fi | ✅ runs the server | ✅ discovers PC via mDNS + pairing code |
 | 👀 Follow mode, sleep mode, size / glow / mood settings | ✅ | ✅ shake your phone for googly chaos |
 
 Everything works **offline with no API key** — Bluey ships with an offline personality and a text
-command parser, so PC control works out of the box. Add an OpenAI key later and the same
-push-to-talk flow becomes a real voice conversation that can understand *and* control your PC.
+command parser, so PC control works out of the box. Add a free Google Gemini key (or an OpenAI key)
+later and the same chat and push-to-talk flow becomes a real conversation that can understand *and*
+control your PC.
 
 ---
 
@@ -45,8 +46,8 @@ parser understands everything here, no microphone and no internet needed.
 
 **2. Push-to-talk — hold `Alt+Space`.**
 Press once, talk (up to ~10 s), press again or wait. In offline mode she reacts playfully to
-your voice's energy. With an OpenAI key configured (Settings → Brain) the clip is transcribed
-with Whisper and becomes a real command/conversation.
+your voice's energy. With a Gemini or OpenAI key configured (Settings → Brain) the clip is
+transcribed and becomes a real command/conversation.
 
 **3. Wake word — just say "Hey Bluey".**
 Turn it on once (Settings → Voice → *Voice activation* → **Wake word**, or the tray menu), and
@@ -201,10 +202,26 @@ Known apps: `notepad, calc, paint, cmd, terminal, explorer, chrome, edge, firefo
 
 ### Upgrading the brain (optional)
 
-Settings → **Brain** → *OpenAI* → paste your API key. Then push-to-talk **and wake word** become
-real conversations: your voice is transcribed (Whisper), Bluey thinks (GPT) with the same
-PC-control tools, and speaks the reply. The key never leaves your PC — it is stored in
-`%APPDATA%\Bluey\config.json` and sent only to `api.openai.com`.
+**Google Gemini (free).** Get a key at <https://aistudio.google.com/apikey> (a Google account is
+enough, no card), then Settings → **Brain** → *Google Gemini* → paste it → Save. Typed chat, the
+phone's text and voice, and push-to-talk now go to Gemini, which answers in Bluey's voice and can
+use the same PC-control tools ("open notepad", "point at Chrome", "scroll down"…). Leave *Gemini
+model* empty and Bluey picks one your key can use. If Google can't be reached, the key is wrong or the
+daily free limit is used up, Bluey says so in a bubble and the offline command parser keeps working.
+
+- Free-tier terms: Google may use what you send to improve its products, and there are daily limits.
+  Only your typed or spoken messages are sent — never your screen.
+- Gemini is **not** used for the always-listening wake word (that would upload everything said in the
+  room, and the free limits would run out). Hands-free: use the phone app's *Hey Bluey* chip, or
+  `Alt+Space`.
+
+**OpenAI.** Settings → **Brain** → *OpenAI* → paste your API key. Then push-to-talk **and wake word**
+become real conversations: your voice is transcribed (Whisper), Bluey thinks (GPT) with the same
+PC-control tools, and speaks the reply.
+
+Keys never leave your PC except to their own service — they are stored in
+`%APPDATA%\Bluey\config.json` and sent only to `generativelanguage.googleapis.com` (Gemini) or
+`api.openai.com` (OpenAI).
 
 ---
 
@@ -214,7 +231,7 @@ PC-control tools, and speaks the reply. The key never leaves your PC — it is s
 bluey-app/
 ├── windows-app/               Electron desktop app
 │   ├── src/main.js            windows, tray, hotkey, IPC, action executor
-│   ├── src/brain.js           scripted personality + OpenAI provider + tool defs
+│   ├── src/brain.js           scripted personality + Gemini and OpenAI providers + tool defs
 │   ├── src/control.js         mouse/keyboard/apps via PowerShell (zero native deps)
 │   ├── src/server.js          phone pairing: HTTP ping + WebSocket + mDNS
 │   ├── src/recorder.js        hidden-window audio: PTT clips, meeting chunks, wake-word engine
@@ -242,6 +259,8 @@ bluey-app/
 - **Android: tap the berry and nothing happens?** Tap directly on the berry, not around it — and the first time, allow the microphone permission.
 - **Wake word triggers from TV/music?** It only acts when it clearly hears the keyword at the start of an utterance; everything else is ignored. If it's too eager, switch back to push-to-talk in Settings → Voice → *Voice activation*.
 - **Phone can't find the PC** — mDNS is sometimes blocked on guest Wi-Fi. Type the PC IP manually.
+- **Phone says "failed to connect … after 6000ms"** — Windows Firewall is blocking the PC. Windows marks hotspot Wi-Fi as *Public*, where incoming connections are blocked. Set the network to **Private** (Settings → Network & Internet → Wi-Fi → your network → Network profile type), restart Bluey and allow it on *Private networks*. Quick check: open `http://<PC IP>:8787/ping` in the phone's browser — it should show `{"app":"bluey"…}`.
+- **Bluey answers with canned jokes even though a Gemini key is saved** — Settings → Brain shows why (wrong key, free limit used up, no internet). Make sure the *Google Gemini* option is ticked, not *Offline personality*.
 - **`Alt+Space` does nothing** — another app grabbed it; Windows reserves it for window menus. Restart Bluey (it registers globally on launch), or use the tray menu.
 - **PC control does nothing in a game** — some full-screen games block synthetic input; use windowed mode.
 - **Pointing misses the window** — windows on other monitors aren't targeted in v1 (primary display only).
