@@ -2,11 +2,13 @@
 /**
  * Bluey's brain.
  *
- * Two providers behind one interface:
+ * Three providers behind one interface:
  *   1. ScriptedBrain (default)  - offline personality with a text command parser
  *                                 so PC control works TODAY, no API key needed.
  *   2. OpenAIBrain              - fully implemented; activates the moment you paste
  *                                 an OpenAI key in Settings -> Brain.
+ *   3. GeminiBrain              - Google's Gemini API; works with the free key from
+ *                                 aistudio.google.com/apikey (Settings -> Brain).
  *
  * respond(input, ctx) -> { text, action, say }
  *   input: { text?: string, audio?: {rms:number, durationMs:number} }
@@ -143,10 +145,10 @@ const LINES = {
     "Tiny message. Big mystery."
   ],
   heardGeneric: [
-    "Interesting! I'm running on brain-lite right now, so pretend I said something wise.",
+    "Interesting! I'm running on brain-lite right now, so pretend I said something wise. (Settings → Brain: paste a free Google Gemini key and I get a real brain.)",
     "Hmmmm. Yes. I agree with... whatever that was.",
     "I heard you! My brain is currently a canned-response shaped hole, but I HEARD you.",
-    "Fascinating. Add an OpenAI key in my settings and I'll have actual opinions about it.",
+    "Fascinating. Add a free Google Gemini key in my settings and I'll have actual opinions about it.",
     "Noted! Filed under 'things my berry brain vaguely understood'."
   ],
   noWindows: [
@@ -208,7 +210,7 @@ const LINES = {
     "Never heard of that one! Give me something I know: notepad, calc, paint, cmd, chrome, edge, spotify, discord, code..."
   ],
   noKey: [
-    "I'd have a smarter answer, but I'm in offline brain mode! Paste an OpenAI key in Settings → Brain and watch me level up.",
+    "I'd have a smarter answer, but I'm in offline brain mode! Paste a free Google Gemini key in Settings → Brain and watch me level up.",
     "My canned response generator is proud of this answer. (Settings → Brain, if you want the smart version of me.)"
   ],
   meeting: [
@@ -525,6 +527,208 @@ class OpenAIBrain {
 }
 
 /* ============================================================
+ * GeminiBrain - Google's Gemini API (the free tier from Google AI Studio)
+ *
+ * Same job as OpenAIBrain: chat with a personality, call the PC-control tools, and
+ * understand a short voice clip. Key: https://aistudio.google.com/apikey (no card needed).
+ * ============================================================ */
+
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+// Used when no model is typed in Settings: the first of these the key can actually use
+// (small "lite" models first - they have the most generous free quota).
+const GEMINI_MODEL_PREFS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite',
+                            'gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-2.5-flash'];
+const GEMINI_MAX_AUDIO_BYTES = 12 * 1024 * 1024;   // inline audio must stay well under the 20 MB request limit
+
+/** Gemini wants the canonical upper-case schema types (OBJECT, STRING ...) */
+function geminiSchema(s) {
+  if (Array.isArray(s)) return s.map(geminiSchema);
+  if (!s || typeof s !== 'object') return s;
+  const out = {};
+  for (const [k, v] of Object.entries(s)) {
+    out[k] = (k === 'type' && typeof v === 'string') ? v.toUpperCase() : geminiSchema(v);
+  }
+  return out;
+}
+
+/** the same tools the OpenAI path uses, in Gemini's shape (a tool with no arguments must omit `parameters`) */
+function geminiDeclarations() {
+  return TOOLS.map(({ function: f }) => {
+    const d = { name: f.name, description: f.description };
+    if (f.parameters && f.parameters.properties && Object.keys(f.parameters.properties).length) d.parameters = geminiSchema(f.parameters);
+    return d;
+  });
+}
+
+function sniffAudioMime(buf) {
+  const b = Buffer.from(buf.subarray ? buf.subarray(0, 12) : buf);
+  const s4 = b.toString('latin1', 0, 4);
+  if (s4 === 'RIFF') return 'audio/wav';
+  if (s4 === 'OggS') return 'audio/ogg';
+  if (s4 === 'fLaC') return 'audio/flac';
+  if (b.toString('latin1', 0, 3) === 'ID3' || (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0)) return 'audio/mp3';
+  return 'audio/webm';   // Chromium's recorder output; Gemini may not accept it - main.js sends a WAV instead when it can
+}
+
+/** Turn a failed HTTP response (or a network failure) into an Error with a message a person can act on */
+async function geminiError(res) {
+  let status = res.status, code = '', msg = '';
+  try {
+    const j = await res.json();
+    const e = j && j.error || {};
+    code = e.status || ''; msg = String(e.message || '').trim();
+  } catch (_) {}
+  const err = new Error(`Gemini ${status} ${code} ${msg}`.trim().slice(0, 300));
+  err.status = status;
+  if (status === 400 && /api key not valid|API_KEY_INVALID|api key.*(expired|invalid)/i.test(msg + code)) {
+    err.userMessage = "Google doesn't accept that API key. Check it in Settings → Brain (copy it again from aistudio.google.com/apikey).";
+  } else if (status === 400 && /location is not supported/i.test(msg)) {
+    err.userMessage = "Google's free Gemini isn't available in your country yet.";
+  } else if (status === 401 || status === 403) {
+    err.userMessage = "Google refused that key (" + status + "). Check it in Settings → Brain, and that it is allowed to use the Gemini API.";
+  } else if (status === 404) {
+    err.userMessage = "Google doesn't know the model I asked for. Clear the Model box in Settings → Brain to let me pick one.";
+  } else if (status === 429) {
+    err.userMessage = "I've used up Google's free allowance for the moment. Give it a minute (or until tomorrow if it's the daily limit) and ask again.";
+  } else if (status >= 500) {
+    err.userMessage = "Google's Gemini is having a wobble (" + status + "). Try again in a moment.";
+  } else {
+    err.userMessage = "Google said no: " + (msg || ('HTTP ' + status)).slice(0, 140);
+  }
+  return err;
+}
+
+function geminiNetworkError(e) {
+  const err = new Error('Gemini request failed: ' + (e && e.message));
+  err.userMessage = (e && (e.name === 'TimeoutError' || e.name === 'AbortError'))
+    ? 'Google took too long to answer. Try again.'
+    : "I can't reach Google right now - is the internet on?";
+  return err;
+}
+
+class GeminiBrain {
+  constructor(key, model = '') {
+    this.key = String(key || '').trim();
+    this.model = String(model || '').trim();   // '' = pick automatically
+    this.history = [];                          // rolling window of {role:'user'|'model', parts:[{text}]}
+    this._auto = '';
+    this._bad = new Set();
+  }
+
+  setKey(key, model) {
+    key = String(key || '').trim();
+    model = String(model || '').trim();
+    if (key !== this.key || model !== this.model) { this._auto = ''; this._bad.clear(); }
+    this.key = key; this.model = model;
+  }
+
+  async _fetch(url, init) {
+    if (!/^[\w.-]{20,}$/.test(this.key)) {
+      const e = new Error('Gemini key missing or malformed');
+      e.userMessage = "That doesn't look like a Google API key. Paste the whole key from aistudio.google.com/apikey into Settings → Brain.";
+      throw e;
+    }
+    let res;
+    try {
+      res = await fetch(url, Object.assign({ signal: AbortSignal.timeout(25000) }, init, {
+        headers: Object.assign({ 'x-goog-api-key': this.key }, init && init.headers)   // header, not ?key=, so it never lands in a URL
+      }));
+    } catch (e) { throw geminiNetworkError(e); }
+    if (!res.ok) throw await geminiError(res);
+    return res.json();
+  }
+
+  /** the model to use: the one typed in Settings, else the first preferred model this key can use */
+  async _model() {
+    if (this.model) return this.model;
+    if (this._auto) return this._auto;
+    const j = await this._fetch(`${GEMINI_BASE}/models?pageSize=200`);
+    const usable = new Set((j.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => String(m.name || '').replace(/^models\//, ''))
+      .filter(n => !this._bad.has(n)));
+    this._auto = GEMINI_MODEL_PREFS.find(n => usable.has(n)) ||
+                 [...usable].find(n => /^gemini-[\d.]+-flash(-lite)?$/.test(n)) ||
+                 GEMINI_MODEL_PREFS[0];
+    return this._auto;
+  }
+
+  async _generate(body) {
+    for (let attempt = 0; ; attempt++) {
+      const model = await this._model();
+      try {
+        return await this._fetch(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+      } catch (e) {
+        // the automatically chosen model vanished: forget it and choose again, once
+        if (e.status === 404 && !this.model && attempt === 0) { this._bad.add(model); this._auto = ''; continue; }
+        throw e;
+      }
+    }
+  }
+
+  static _text(parts) {
+    return (parts || []).filter(p => p && typeof p.text === 'string' && !p.thought).map(p => p.text).join('').trim();
+  }
+
+  async transcribe(buffer, mime) {
+    if (!buffer || !buffer.length) return '';
+    if (buffer.length > GEMINI_MAX_AUDIO_BYTES) throw Object.assign(new Error('clip too long'), { userMessage: 'That clip is too long for me - try a shorter one.' });
+    const j = await this._generate({
+      contents: [{ role: 'user', parts: [
+        { text: 'Transcribe the speech in this audio clip. Reply with only the words that were spoken. If there is no clear speech, reply with nothing at all.' },
+        { inlineData: { mimeType: mime || sniffAudioMime(buffer), data: Buffer.from(buffer).toString('base64') } }
+      ] }],
+      generationConfig: { temperature: 0, maxOutputTokens: 1024 }
+    });
+    const cand = j.candidates && j.candidates[0];
+    return GeminiBrain._text(cand && cand.content && cand.content.parts);
+  }
+
+  async respond(input, ctx) {
+    let text = input.text || '';
+    if (!text && input.audio && input.audio.buffer) text = await this.transcribe(input.audio.buffer, input.audio.mime);
+    if (!text) return { text: "I didn't catch that — say it again?", action: { type: ACTIONS.NONE }, say: true };
+
+    const userTurn = { role: 'user', parts: [{ text }] };
+    const contents = [...this.history, userTurn];
+    const systemInstruction = { parts: [{ text: SYSTEM_PROMPT + `\nCurrent state: mood=${ctx.mood}, follow=${ctx.follow}, brain=gemini. Screen size ${ctx.screenW}x${ctx.screenH}.` }] };
+    const tools = [{ functionDeclarations: geminiDeclarations() }];
+
+    let replyText = '', blocked = false;
+    for (let hop = 0; hop < 3; hop++) {
+      const j = await this._generate({ systemInstruction, contents, tools, generationConfig: { temperature: 0.9, maxOutputTokens: 1024 } });
+      const cand = j.candidates && j.candidates[0];
+      if (!cand || !cand.content) { blocked = true; break; }
+      const parts = cand.content.parts || [];
+      const calls = parts.filter(p => p && p.functionCall);
+      if (calls.length) {
+        contents.push(cand.content);   // exactly as received - Gemini 3 needs its own "thought signature" echoed back
+        const replies = [];
+        for (const p of calls) {
+          const { name, args } = p.functionCall;
+          let response;
+          try { response = { result: (await ctx.execTool(name, args || {})) || { ok: true } }; }
+          catch (e) { response = { error: String(e && e.message || e).slice(0, 200) }; }
+          try { response = JSON.parse(JSON.stringify(response)); } catch (_) { response = { result: 'ok' }; }
+          replies.push({ functionResponse: { name, response } });
+        }
+        contents.push({ role: 'user', parts: replies });
+        continue;   // let the model speak after tooling
+      }
+      replyText = GeminiBrain._text(parts);
+      break;
+    }
+
+    if (!replyText) replyText = blocked ? "I can't answer that one — ask me something else?" : 'Done!';
+    this.history.push(userTurn, { role: 'model', parts: [{ text: replyText }] });
+    if (this.history.length > 16) this.history = this.history.slice(-16);
+    return { text: replyText, action: { type: ACTIONS.NONE }, say: true };
+  }
+}
+
+/* ============================================================
  * Router
  * ============================================================ */
 
@@ -532,32 +736,63 @@ class BrainRouter {
   constructor() {
     this.scripted = new ScriptedBrain();
     this.openai = null;
-    this.mode = 'scripted';
+    this.gemini = null;
+    this.mode = 'scripted';   // 'scripted' | 'openai' | 'gemini'
     this.lastError = null;
   }
 
   configure(cfg) {
+    this.lastError = null;
     if (cfg.brain === 'openai' && cfg.openaiKey) {
       this.mode = 'openai';
       if (!this.openai) this.openai = new OpenAIBrain(cfg.openaiKey, cfg.openaiModel);
       else this.openai.setKey(cfg.openaiKey, cfg.openaiModel);
+    } else if (cfg.brain === 'gemini' && String(cfg.geminiKey || '').trim()) {
+      this.mode = 'gemini';
+      if (!this.gemini) this.gemini = new GeminiBrain(cfg.geminiKey, cfg.geminiModel);
+      else this.gemini.setKey(cfg.geminiKey, cfg.geminiModel);
     } else {
       this.mode = 'scripted';
     }
   }
 
+  /** the online brain in use (OpenAI or Gemini), or null when running offline */
+  get cloud() {
+    if (this.mode === 'openai') return this.openai;
+    if (this.mode === 'gemini') return this.gemini;
+    return null;
+  }
+
+  /**
+   * Put a voice clip on `input` in the form the active brain can listen to.
+   * data = what the recorder produced (webm/opus, or a phone's wav); wav = a wav version, when we have one.
+   * Offline mode gets nothing: it only looks at loudness and length.
+   */
+  attachAudio(input, { data, wav } = {}) {
+    if (this.mode === 'openai' && data) input.audio.buffer = Buffer.from(data);
+    else if (this.mode === 'gemini' && (wav || data)) {
+      const buf = Buffer.from(wav || data);
+      if (wav || sniffAudioMime(buf) !== 'audio/webm') { input.audio.buffer = buf; input.audio.mime = sniffAudioMime(buf); }
+    }
+    return input;
+  }
+
   async respond(input, ctx) {
     try {
-      if (this.mode === 'openai' && this.openai) {
-        return await this.openai.respond(input, ctx);
+      const cloud = this.cloud;
+      if (cloud) {
+        const r = await cloud.respond(input, ctx);
+        this.lastError = null;
+        return r;
       }
       return await this.scripted.respond(input, ctx);
     } catch (e) {
-      this.lastError = e.message;
+      this.lastError = e.userMessage || e.message;
       console.error('[brain] error:', e.message);
-      // graceful fallback to scripted
+      // graceful fallback to scripted: commands ("open notepad") still work offline
       const fb = await this.scripted.respond(input, ctx);
-      fb.text = fb.text; // keep it light; error surfaced in settings
+      // Gemini: if the offline brain had nothing specific to do, say WHY the smart brain is silent
+      if (this.mode === 'gemini' && e.userMessage && (!fb.action || fb.action.type === ACTIONS.NONE)) fb.text = e.userMessage;
       return fb;
     }
   }
@@ -582,4 +817,4 @@ class BrainRouter {
   }
 }
 
-module.exports = { BrainRouter, ScriptedBrain, OpenAIBrain, ACTIONS, LINES, CONTROL_VERBS, stripWakeWord };
+module.exports = { BrainRouter, ScriptedBrain, OpenAIBrain, GeminiBrain, ACTIONS, LINES, CONTROL_VERBS, stripWakeWord };

@@ -22,6 +22,26 @@ function rmsOfBuffer(audioBuffer) {
   return Math.sqrt(sum / Math.max(1, n));
 }
 
+/** decoded audio -> 16 kHz mono 16-bit PCM WAV (Uint8Array) */
+async function toWav16k(decoded) {
+  const rate = 16000;
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);   // also mixes down to mono
+  const src = off.createBufferSource();
+  src.buffer = decoded; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const dv = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); dv.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  str(36, 'data'); dv.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) {
+    const s = Math.max(-1, Math.min(1, pcm[i]));
+    dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Uint8Array(dv.buffer);
+}
+
 async function ensureMic() {
   if (stream) return stream;
   stream = await navigator.mediaDevices.getUserMedia({
@@ -77,16 +97,17 @@ window.recAPI.onCmd(async (msg) => {
       await stopRec();
       const blob = new Blob(chunks, { type: rec && rec.mimeType || 'audio/webm' });
       chunks = [];
-      let rms = 0.05;
+      let rms = 0.05, wav = null;
       try {
         const ctx = new AudioContext();
         const ab = await blob.arrayBuffer();
         const decoded = await ctx.decodeAudioData(ab.slice(0));
         rms = rmsOfBuffer(decoded);
+        try { wav = await toWav16k(decoded); } catch (_) {}   // plain WAV for brains that can't read webm/opus (Gemini)
         ctx.close();
       } catch (_) {}
       const data = new Uint8Array(await blob.arrayBuffer());
-      window.recAPI.clip({ data, durationMs, rms });
+      window.recAPI.clip({ data, durationMs, rms, wav });
       mode = null;
     }
     else if (msg.op === 'talk-cancel') {

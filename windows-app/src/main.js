@@ -207,7 +207,7 @@ async function finishListening() {
     return;
   }
   const input = { audio: { rms: clip.rms, durationMs: clip.durationMs } };
-  if (brain.mode === 'openai') input.audio.buffer = Buffer.from(clip.data);
+  brain.attachAudio(input, { data: clip.data, wav: clip.wav });
   const reply = await brain.respond(input, brainCtx());
   sayToOverlay(reply.text, { voice: true });
   if (reply.action) executeAction(reply.action);
@@ -283,7 +283,7 @@ function handleWakeError(kind) {
     config.set('voiceMode', 'ptt');
     applyVoiceMode();
     refreshTray();
-    sayToOverlay('The free wake word needs a Google speech key, and this app has none. Alt+Space still works. For hands-free: add an OpenAI key (Settings → Brain) or your own Google API key (Settings → Voice).', { voice: false });
+    sayToOverlay('The free wake word needs a Google speech key, and this app has none. Alt+Space still works. For hands-free: use "Hey Bluey" on your paired phone, add an OpenAI key (Settings → Brain) or your own Google API key (Settings → Voice).', { voice: false });
     return;
   }
   if (kind === 'permission') {
@@ -482,7 +482,7 @@ function startServer() {
   server.on('ptt', async (buf, durMs) => {
     state.lastTalk = Date.now();
     const input = { audio: { rms: 0.1, durationMs: durMs } };
-    if (brain.mode === 'openai') input.audio.buffer = buf;
+    brain.attachAudio(input, { data: buf, wav: buf });   // the phone sends a WAV
     const reply = await brain.respond(input, brainCtx());
     sayToOverlay(reply.text, { voice: true });
     if (reply.action) executeAction(reply.action);
@@ -640,7 +640,7 @@ function registerSettingsIPC() {
       if (config.get('serverEnabled')) startServer();
     }
     // voice mode / brain changes re-arm the wake engine
-    if (['voiceMode', 'wakeWord', 'brain', 'openaiKey', 'openaiModel'].some(k => patch && k in patch)) {
+    if (['voiceMode', 'wakeWord', 'brain', 'openaiKey', 'openaiModel', 'geminiKey', 'geminiModel'].some(k => patch && k in patch)) {
       applyVoiceMode();
     }
     refreshTray();

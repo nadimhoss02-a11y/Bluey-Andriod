@@ -19,7 +19,8 @@ const IS_WINDOWS = os.platform() === 'win32';
 
 const MAX_TYPE_CHARS = 4000;
 
-function ps(script, timeoutMs = 6000) {
+// PowerShell's cold start can take 6+ seconds on a busy PC with antivirus; a short timeout turned slow into "failed"
+function ps(script, timeoutMs = 15000) {
   return new Promise((resolve) => {
     if (!IS_WINDOWS) {
       resolve({ ok: false, reason: 'windows-only', stdout: '', stderr: 'not windows' });
@@ -164,7 +165,7 @@ function openApp(nameRaw) {
   return psStrict(`
 $n = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(target)}'))
 Start-Process -FilePath $n
-'ok'`, 8000);
+'ok'`, 15000);
 }
 
 /* ---------- window discovery ---------- */
@@ -186,7 +187,7 @@ foreach ($p in $win) {
     x = $rect.L; y = $rect.T; w = ($rect.Rt - $rect.L); h = ($rect.B - $rect.T)
   }
 }
-$out | ConvertTo-Json -Compress`, 8000);
+$out | ConvertTo-Json -Compress`, 15000);
   if (!r.ok || !r.stdout.trim()) return [];
   try {
     const parsed = JSON.parse(r.stdout.trim());

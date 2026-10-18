@@ -26,9 +26,11 @@ const DEFAULTS = {
   wakeWord: 'hey bluey',  // phrase; she also answers to just her name
   googleApiKey: '',       // optional: enables Chromium's speech engine for the free wake word (needs a restart)
   // brain
-  brain: 'scripted',      // 'scripted' | 'openai'
+  brain: 'scripted',      // 'scripted' | 'openai' | 'gemini'
   openaiKey: '',
   openaiModel: 'gpt-4o-mini',
+  geminiKey: '',          // free key from aistudio.google.com/apikey
+  geminiModel: '',        // empty = pick automatically
   // pc control
   controlEnabled: true,
   // companion server
