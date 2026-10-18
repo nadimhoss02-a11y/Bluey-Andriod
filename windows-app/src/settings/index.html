@@ -86,7 +86,10 @@
   <div class="row"><label>Wake phrase <span class="hint">she also answers to just her name</span></label>
     <input type="text" id="wakeWord" placeholder="hey bluey" style="width:170px">
   </div>
-  <div class="hint" id="wakeNote">Wake word listens for her name, then runs your command - try "Hey Bluey, open notepad" or "Hey Bluey, point at Spotify". She goes deaf while she's speaking and during meetings. Mic is only used on this PC.</div>
+  <div class="row"><label>Google API key <span class="hint">optional - lets the free wake word run (restart Bluey after saving)</span></label>
+    <input type="password" id="googleApiKey" placeholder="AIza..." autocomplete="off">
+  </div>
+  <div class="hint" id="wakeNote">Wake word listens for her name, then runs your command - try "Hey Bluey, open notepad" or "Hey Bluey, point at Spotify". Hands-free needs either an OpenAI key (Brain, below) or your own Google API key with the Speech API enabled; without one, use Alt+Space. She goes deaf while she's speaking and during meetings.</div>
 
   <h2>Brain</h2>
   <div class="row"><label>Offline personality <span class="hint">no key needed</span></label><input type="radio" name="brain" value="scripted" checked></div>
@@ -103,7 +106,7 @@
   <div class="row"><label>PC IP address</label><span class="hint" id="pcIP" style="font-size:13px;color:#9db4ff"></span></div>
   <div class="row"><label>Port</label><input type="number" id="port" min="1024" max="65535" style="width:110px"></div>
   <div class="row"><label>Pairing code</label><span class="code" id="pairingCode"></span></div>
-  <div class="hint">On your phone: Bluey app → Pair → pick this PC (same Wi-Fi) or type the IP, then enter the code.</div>
+  <div class="hint">On your phone: Bluey app → Pair → pick this PC (same Wi-Fi) or type the IP, then enter the 6-digit code. Keep it private - anyone with it can control this PC. On the Windows Firewall prompt, allow <b>Private</b> networks only.</div>
 
   <h2>Meeting notes</h2>
   <div class="row"><label>Notes folder</label><button id="openNotes">Open folder</button></div>
@@ -146,6 +149,7 @@ window.settings.get().then((c) => {
   $('volume').value = Math.round(c.volume * 100); $('volumeVal').textContent = Math.round(c.volume * 100) + '%';
   $('voiceMode').value = c.voiceMode || 'ptt';
   $('wakeWord').value = c.wakeWord || 'hey bluey';
+  $('googleApiKey').value = c.googleApiKey || '';
   if (!('speechSynthesis' in window)) $('voiceName').innerHTML = '<option value="">Default</option>';
   document.querySelector(`input[name=brain][value=${c.brain === 'openai' ? 'openai' : 'scripted'}]`).checked = true;
   $('openaiKey').value = c.openaiKey || '';
@@ -179,6 +183,7 @@ $('saveBtn').addEventListener('click', () => {
     voiceName: $('voiceName').value,
     voiceMode: $('voiceMode').value,
     wakeWord: $('wakeWord').value.trim() || 'hey bluey',
+    googleApiKey: $('googleApiKey').value.trim(),
     brain: document.querySelector('input[name=brain]:checked').value,
     openaiKey: $('openaiKey').value.trim(),
     openaiModel: $('openaiModel').value.trim() || 'gpt-4o-mini',
