@@ -378,8 +378,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener, PairClient.Listen
     /* ---------- permission ---------- */
 
     private fun micGranted(): Boolean =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun askMicPermission() {
         if (!micGranted()) {
