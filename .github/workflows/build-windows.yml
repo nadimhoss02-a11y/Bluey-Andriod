@@ -35,3 +35,13 @@ jobs:
           path: |
             windows-app/dist/*.exe
           if-no-files-found: error
+
+      # Half the size of the combined artifact (installer only, no portable exe): much easier to download
+      # on a slow or flaky connection, where a 150 MB transfer can drop before it finishes.
+      - name: Upload installer only (smaller download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluey-windows-installer
+          path: windows-app/dist/Bluey Setup *.exe
+          compression-level: 0
+          if-no-files-found: error
