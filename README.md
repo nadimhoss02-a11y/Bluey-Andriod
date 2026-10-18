@@ -114,7 +114,11 @@ notes, settings.
 3. **Download the artifacts.** When a run finishes (green check), open it and download from the
    *Artifacts* section:
    - `bluey-windows` → unzip to get **`Bluey Setup 1.1.0.exe`** (installer) and a portable
-     `Bluey 1.1.0.exe` that runs without installing.
+     `Bluey 1.1.0.exe` that runs without installing (about 156 MB).
+   - `bluey-windows-installer` → just **`Bluey Setup 1.1.0.exe`** (about 78 MB). Use this one if the
+     bigger download keeps failing on a slow connection. An installed copy also runs from a fixed folder,
+     so the Windows Firewall prompt appears once; the portable exe unpacks to a new temp folder each launch,
+     which can make Windows ask again.
    - `bluey-android` → **`app-debug.apk`**.
 4. **Install.**
    - *Windows*: run the Setup exe. Windows SmartScreen may warn "unknown publisher" — click
