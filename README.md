@@ -21,7 +21,7 @@
 | 👉 Own arrow cursor that points at things | ✅ at your mouse, screen center, or any open window | ✅ reports replies |
 | 💬 Speech bubbles + voice | ✅ spoken with Windows voices | ✅ spoken with Android TTS |
 | 🎙 Push-to-talk | ✅ `Alt+Space` | ✅ hold the mic button |
-| 🗣 Wake word "Hey Bluey" | ✅ always-listening, hands-free | ✅ always-listening while the app is open |
+| 🗣 Wake word "Hey Bluey" | ✅ hands-free with an OpenAI key (or your own Google API key) | ✅ always-listening while the app is open |
 | 👆 Tap the character to talk | ✅ double-click the berry | ✅ tap the berry (original Bluey style) |
 | 🤖 AI voice chat | ✅ offline personality now · paste an OpenAI key to upgrade | ✅ sends audio to the PC when paired |
 | 🖱 PC control (click / type / scroll / open apps) | ✅ via chat commands | ✅ from your phone |
@@ -60,11 +60,13 @@ she perks up whenever she hears her name — no keys to press:
 ```
 
 How it works under the hood, and what to expect:
-- **Offline brain** (default): she uses Chromium's built-in speech recognition — free, no API
-  key, but it needs an internet connection. If the network is down she tells you once and
-  `Alt+Space` keeps working offline.
-- **OpenAI brain**: she listens for voice activity, records the utterance, transcribes it with
-  Whisper, and checks it for the wake word — no Google involvement.
+- **OpenAI brain** (recommended for hands-free): she listens for voice activity, records the
+  utterance, transcribes it with Whisper, and checks it for the wake word — no Google involvement.
+- **Offline brain** (default): Chromium's built-in speech recognition only works when it has a
+  Google API key, and the Electron build ships without one. Paste your own key in
+  Settings → Voice → *Google API key* (a Google Cloud key with the Speech API enabled) and restart
+  Bluey. Without a key, Bluey tells you once, switches back to push-to-talk, and `Alt+Space`
+  keeps working offline.
 - **She never hears herself**: while her TTS voice is speaking, and during meeting recordings,
   the wake engine is paused. Nothing loops, nothing is captured mid-call.
 - **Privacy**: the mic stream lives inside the app on your PC. Transcripts are matched against
@@ -152,8 +154,11 @@ restarts (Ctrl+C → `npm start` again), no packaging step involved.
 ## 📱 Pairing the phone with the PC
 
 1. Run Bluey on Windows. Phone and PC must be on the **same Wi-Fi**.
-2. On the PC: tray icon → **Settings** → *Phone companion* → note the **PC IP** and the **4-digit code**.
+2. On the PC: tray icon → **Settings** → *Phone companion* → note the **PC IP** and the **6-digit code**.
+   Treat the code like a password: anyone who has it can control this PC from the same network.
+   (Wrong codes are throttled: 5 misses lock that device out for 10 minutes.)
 3. On the phone: **Pair with PC** → pick your PC from the discovered list (or type the IP) → enter the code.
+   If Windows Firewall asks about Bluey, allow **Private networks only** — not Public.
 4. Now **tap the berry and talk**, enable the **"Hey Bluey"** chip for hands-free, or **hold the mic button**:
    your voice goes to the PC, Bluey answers in a bubble on **both** screens (and out loud on the PC).
    Chat text and quick commands work from the phone too.
@@ -228,7 +233,7 @@ bluey-app/
 ## 🔧 Troubleshooting
 
 - **No sound on PC?** Bluey uses the Windows voice named in Settings → Voice; pick another one there.
-- **Wake word doesn't react?** It needs internet in offline mode (Chromium's speech engine). Check the mic isn't muted/occupied by another app, then toggle the tray item *Wake word "Hey Bluey"* off and on. With an OpenAI key it works via Whisper instead and only needs internet for the API call.
+- **Wake word doesn't react?** Without an OpenAI key or your own Google API key (Settings) there is no speech engine for it — Bluey says so and falls back to `Alt+Space`. With a key: check the mic isn't muted/occupied by another app, then toggle the tray item *Wake word "Hey Bluey"* off and on.
 - **Android wake word doesn't react?** It only listens while the Bluey app is open (battery + privacy). Check the "Hey Bluey" chip shows *ON*, mic permission is granted, and your phone has a speech app (Google app installed). Wake word uses your phone's on-device speech engine.
 - **Android: tap the berry and nothing happens?** Tap directly on the berry, not around it — and the first time, allow the microphone permission.
 - **Wake word triggers from TV/music?** It only acts when it clearly hears the keyword at the start of an utterance; everything else is ignored. If it's too eager, switch back to push-to-talk in Settings → Voice → *Voice activation*.

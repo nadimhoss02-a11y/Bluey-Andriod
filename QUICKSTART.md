@@ -109,14 +109,16 @@ Pick ONE route below.
    - `"Hey Bluey, point at Spotify"` → aims her arrow at Spotify
    - `"Bluey, tell me a joke"` → she answers to just her name too
 3. Notes:
-   - Offline mode uses Chromium's free speech engine → **internet required**.
+   - Hands-free needs an **OpenAI key** (Settings → Brain) **or your own Google API key**
+     (Settings → Voice). Without either, Bluey says so and keeps push-to-talk (`Alt+Space`).
    - She goes deaf while she is speaking and during meeting recordings.
    - Anything said without her name is ignored.
    - The wake phrase is customizable in Settings → **Wake phrase**.
 
 ### Way 4: From your phone
 
-1. On Windows: tray icon → **Settings** → note the **PC IP address** and **4-digit code**.
+1. On Windows: tray icon → **Settings** → note the **PC IP address** and **6-digit code**
+   (keep the code private; if Windows Firewall asks, allow **Private networks only**).
 2. On Android: open Bluey → **Pair with PC** → pick your PC from the list
    (or type the IP) → enter the code. Same Wi-Fi required.
 3. Talk to her three ways:
@@ -141,7 +143,7 @@ Pick ONE route below.
 
 | Problem | Fix |
 |---|---|
-| Wake word doesn't react | Check internet (offline mode needs it), toggle the tray wake item off/on, make sure no other app holds the mic |
+| Wake word doesn't react | It needs an OpenAI key or your own Google API key (see Way 3); then toggle the tray wake item off/on and make sure no other app holds the mic |
 | Alt+Space does nothing | Another app owns the hotkey — restart Bluey, or use the tray menu |
 | Phone can't find PC | Type the PC IP manually instead of discovery |
 | SmartScreen blocks the exe | More info → Run anyway (unsigned app) |
