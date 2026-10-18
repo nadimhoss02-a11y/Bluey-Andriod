@@ -1,6 +1,11 @@
 'use strict';
 /* Bluey overlay renderer: googly-eye physics, bubbles, pointing cursor, follow mode. */
 
+// Everything lives inside a function scope: the preload exposes the IPC bridge as `window.bluey`,
+// and a top-level `const bluey` (the character element below) would collide with it and make the
+// whole script fail to parse ("Identifier 'bluey' has already been declared").
+(function () {
+
 const $ = (id) => document.getElementById(id);
 const bluey = $('bluey');
 const body = $('body');
@@ -253,3 +258,5 @@ layout();
 place();
 scheduleBlink();
 requestAnimationFrame(tick);
+
+})();
