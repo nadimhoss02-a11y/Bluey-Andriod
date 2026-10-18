@@ -18,6 +18,8 @@ class WavRecorder {
     @Volatile private var running = false
     @Volatile private var amplitude = 0f
     private val pcm = ArrayList<ByteArray>()
+    private var rmsTotal = 0.0    // running sum of per-chunk RMS, for a true average
+    private var rmsCount = 0
 
     val isRunning: Boolean get() = running
     fun currentAmplitude(): Float = amplitude
@@ -40,6 +42,8 @@ class WavRecorder {
 
         record = rec
         pcm.clear()
+        rmsTotal = 0.0
+        rmsCount = 0
         running = true
         rec.startRecording()
 
@@ -58,6 +62,7 @@ class WavRecorder {
                         i += 2
                     }
                     amplitude = kotlin.math.sqrt(sum / (n / 2).coerceAtLeast(1)).toFloat()
+                    synchronized(pcm) { rmsTotal += amplitude; rmsCount++ }
                 }
             }
         }.also { it.start() }
@@ -78,10 +83,9 @@ class WavRecorder {
         if (chunks.isEmpty()) return null
 
         var total = 0
-        var rmsSum = 0.0
-        for (c in chunks) { total += c.size; rmsSum += amplitude }
+        for (c in chunks) total += c.size
         val durationMs = (total / 2 * 1000L) / sampleRate
-        val avgRms = if (chunks.isEmpty()) 0.05f else (rmsSum / chunks.size).toFloat()
+        val avgRms = synchronized(pcm) { if (rmsCount == 0) 0.05f else (rmsTotal / rmsCount).toFloat() }
 
         val wav = ByteArray(44 + total)
         writeWavHeader(wav, total, sampleRate, 1, 16)

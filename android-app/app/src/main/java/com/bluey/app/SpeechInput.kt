@@ -51,6 +51,7 @@ class SpeechInput(private val context: Context) {
     private var oneShot = false
     private var wakeOn = false
     private var suspended = false
+    private var held = false          // holdMic() was called and releaseMic() hasn't been yet
     private var engineBusy = false
     private var consecutiveErrors = 0
     private var lastHeardAt = 0L
@@ -76,6 +77,7 @@ class SpeechInput(private val context: Context) {
     fun cancelTap() {
         if (!oneShot) return
         oneShot = false
+        held = false
         stopEngine()
         restartWakeIfDue(300)
     }
@@ -90,11 +92,13 @@ class SpeechInput(private val context: Context) {
 
     /** Bluey is about to speak, or push-to-talk needs the mic */
     fun holdMic() {
+        held = true
         stopEngine()
     }
 
     /** mic is free again - resume wake listening if enabled */
     fun releaseMic() {
+        held = false
         restartWakeIfDue(350)
     }
 
@@ -107,6 +111,7 @@ class SpeechInput(private val context: Context) {
     /** activity is visible again */
     fun foreground() {
         suspended = false
+        held = false
         restartWakeIfDue(300)
     }
 
@@ -143,9 +148,22 @@ class SpeechInput(private val context: Context) {
     }
 
     private fun restartWakeIfDue(delayMs: Long) {
-        if (suspended || !wakeOn || oneShot) return
+        if (suspended || held || !wakeOn || oneShot) return
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({ startEngine() }, delayMs)
+    }
+
+    /**
+     * The system SpeechRecognizer is one-shot: after a result or an error it is spent. startEngine()
+     * refuses to run while `recognizer` is non-null, so a plain restartWakeIfDue() from a callback did
+     * nothing and wake listening died after the first utterance. Drop the spent recognizer first, then
+     * start a fresh one. The teardown is posted so we never destroy it from inside its own callback.
+     */
+    private fun recycleThenRestart(delayMs: Long) {
+        handler.post {
+            if (recognizer != null) stopEngine()   // also clears pending callbacks
+            restartWakeIfDue(delayMs)
+        }
     }
 
     private fun voiceIntent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -176,10 +194,10 @@ class SpeechInput(private val context: Context) {
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
                     // silence, nothing heard
-                    if (wasOneShot) finishOneShot("") else restartWakeIfDue(250)
+                    if (wasOneShot) finishOneShot("") else recycleThenRestart(250)
 
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
-                    if (wasOneShot) finishOneShot("") else restartWakeIfDue(900)
+                    if (wasOneShot) finishOneShot("") else recycleThenRestart(900)
 
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     wakeOn = false
@@ -200,7 +218,7 @@ class SpeechInput(private val context: Context) {
                         delegate?.onWakeStateChanged()
                         delegate?.onMicProblem("Speech recognition keeps failing, so I paused wake word. Tap the chip to retry.")
                     } else {
-                        restartWakeIfDue(if (error == SpeechRecognizer.ERROR_NETWORK) 3000L else 1200L)
+                        recycleThenRestart(if (error == SpeechRecognizer.ERROR_NETWORK) 3000L else 1200L)
                     }
                 }
             }
@@ -218,7 +236,7 @@ class SpeechInput(private val context: Context) {
                     lastHeardAt = now
                     delegate?.onWakeHeard(text)
                 }
-                restartWakeIfDue(250)
+                recycleThenRestart(250)
             }
         }
 
