@@ -67,7 +67,8 @@ class PairActivity : AppCompatActivity() {
             val code = etCode.text.toString().trim()
             when {
                 host.isEmpty() -> connectStatus.text = "Pick a PC above or type its IP."
-                code.length != 4 -> connectStatus.text = "The pairing code is 4 digits (see PC Settings)."
+                code.length !in 4..8 || !code.all { it.isDigit() } ->
+                    connectStatus.text = "The pairing code is 6 digits (see PC Settings)."
                 else -> {
                     connectStatus.text = "Connecting to $host:$port…"
                     testConnect(host, port, code, connectStatus)
@@ -160,7 +161,7 @@ class PairActivity : AppCompatActivity() {
             override fun onBubble(text: String) {}
             override fun onClosed(reason: String) {
                 runOnUiThread {
-                    statusView.text = "Failed: $reason (check IP, port, and the 4-digit code)"
+                    statusView.text = "Failed: $reason (check IP, port, and the 6-digit code)"
                 }
             }
         })
