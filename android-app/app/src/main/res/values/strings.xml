@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bluey</string>
+    <string name="talk_hint">Hold to talk</string>
+    <string name="listening">Listening…</string>
+    <string name="standalone_mode">Standalone berry mode</string>
+    <string name="wake_off">\"Hey Bluey\": tap to always-listen</string>
+    <string name="wake_on">\"Hey Bluey\" is ON - listening (tap to turn off)</string>
+    <string name="pair">Pair with PC</string>
+    <string name="chat">Chat</string>
+</resources>

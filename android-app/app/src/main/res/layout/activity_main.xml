@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.bluey.app.BlueyView
+        android:id="@+id/blueyView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/statusChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="22dp"
+        android:background="@drawable/card_bg"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:text="@string/standalone_mode"
+        android:textColor="@color/text_dim"
+        android:textSize="13sp"
+        android:drawablePadding="8dp" />
+
+    <TextView
+        android:id="@+id/btnWake"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="66dp"
+        android:background="@drawable/card_bg"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="7dp"
+        android:text="@string/wake_off"
+        android:textColor="@color/text_dim"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="28dp"
+        android:paddingBottom="26dp"
+        android:paddingTop="14dp">
+
+        <Button
+            android:id="@+id/btnChat"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/card_bg"
+            android:text="@string/chat"
+            android:textColor="@color/text_main" />
+
+        <Space
+            android:layout_width="18dp"
+            android:layout_height="1dp" />
+
+        <Button
+            android:id="@+id/btnPair"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/card_bg"
+            android:text="@string/pair"
+            android:textColor="@color/text_main" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnTalk"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="88dp"
+        android:background="@drawable/btn_talk"
+        android:text="@string/talk_hint"
+        android:textColor="#ffffff"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:stateListAnimator="@null" />
+</FrameLayout>

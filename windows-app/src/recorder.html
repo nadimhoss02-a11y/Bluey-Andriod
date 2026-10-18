@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>bluey-rec</title></head>
+<body>
+<script>
+// Hidden audio engine. Handles push-to-talk clips, chunked meeting recording,
+// and the always-listening wake word engine ("Hey Bluey").
+let stream = null;
+let rec = null;
+let chunks = [];
+let mode = null;          // 'talk' | 'meeting'
+let meetingTimer = null;
+let levelTimer = null;
+let talkStartedAt = 0;
+
+function rmsOfBuffer(audioBuffer) {
+  const ch = audioBuffer.getChannelData(0);
+  let sum = 0;
+  const step = Math.max(1, Math.floor(ch.length / 200000));
+  let n = 0;
+  for (let i = 0; i < ch.length; i += step) { sum += ch[i] * ch[i]; n++; }
+  return Math.sqrt(sum / Math.max(1, n));
+}
+
+async function ensureMic() {
+  if (stream) return stream;
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true }
+  });
+  return stream;
+}
+
+function mimeType() {
+  const prefs = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+  return prefs.find(t => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+async function startRec(timeslice) {
+  const s = await ensureMic();
+  chunks = [];
+  rec = new MediaRecorder(s, mimeType() ? { mimeType: mimeType() } : undefined);
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.start(timeslice || undefined);
+}
+
+async function stopRec() {
+  return new Promise((resolve) => {
+    if (!rec || rec.state === 'inactive') { resolve(null); return; }
+    rec.onstop = () => { resolve(null); };
+    try { rec.stop(); } catch (_) { resolve(null); }
+    setTimeout(() => resolve(null), 1500);
+  });
+}
+
+window.recAPI.onCmd(async (msg) => {
+  try {
+    if (msg.op === 'talk-start') {
+      mode = 'talk';
+      await startRec(0);
+      talkStartedAt = Date.now();
+      levelTimer = setInterval(async () => {
+        // cheap level metering: decode a tiny live sample is expensive;
+        // use AnalyserNode instead
+        if (analyser) {
+          const buf = new Uint8Array(analyser.fftSize);
+          analyser.getByteTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+          window.recAPI.level(Math.sqrt(sum / buf.length));
+        }
+      }, 100);
+      if (!analyser) setupAnalyser();
+    }
+    else if (msg.op === 'talk-stop') {
+      clearInterval(levelTimer); levelTimer = null;
+      const durationMs = Date.now() - talkStartedAt;
+      await stopRec();
+      const blob = new Blob(chunks, { type: rec && rec.mimeType || 'audio/webm' });
+      chunks = [];
+      let rms = 0.05;
+      try {
+        const ctx = new AudioContext();
+        const ab = await blob.arrayBuffer();
+        const decoded = await ctx.decodeAudioData(ab.slice(0));
+        rms = rmsOfBuffer(decoded);
+        ctx.close();
+      } catch (_) {}
+      const data = new Uint8Array(await blob.arrayBuffer());
+      window.recAPI.clip({ data, durationMs, rms });
+      mode = null;
+    }
+    else if (msg.op === 'talk-cancel') {
+      clearInterval(levelTimer); levelTimer = null;
+      await stopRec();
+      chunks = [];
+      mode = null;
+    }
+    else if (msg.op === 'meeting-start') {
+      mode = 'meeting';
+      const chunkMs = Math.max(30, msg.chunkSeconds || 300) * 1000;
+      const runChunk = async () => {
+        if (mode !== 'meeting') return;
+        await startRec(0);
+        meetingTimer = setTimeout(async () => {
+          if (mode !== 'meeting') return;
+          await stopRec();
+          const blob = new Blob(chunks, { type: rec && rec.mimeType || 'audio/webm' });
+          chunks = [];
+          if (blob.size > 0) {
+            window.recAPI.chunk({ data: new Uint8Array(await blob.arrayBuffer()) });
+          }
+          runChunk(); // next chunk
+        }, chunkMs);
+      };
+      if (!analyser) setupAnalyser();
+      runChunk();
+    }
+    else if (msg.op === 'meeting-stop') {
+      clearTimeout(meetingTimer); meetingTimer = null;
+      await stopRec();
+      const blob = new Blob(chunks, { type: rec && rec.mimeType || 'audio/webm' });
+      chunks = [];
+      if (blob.size > 0) window.recAPI.chunk({ data: new Uint8Array(await blob.arrayBuffer()) });
+      mode = null;
+    }
+    else if (msg.op === 'wake-start') {
+      await wakeStart(msg);
+    }
+    else if (msg.op === 'wake-stop') {
+      wakeStopEngine();
+    }
+    else if (msg.op === 'wake-pause') {
+      wakePaused(true);
+    }
+    else if (msg.op === 'wake-resume') {
+      wakePaused(false);
+    }
+  } catch (err) {
+    window.recAPI.error(String(err && err.message || err));
+  }
+});
+
+let analyser = null;
+function setupAnalyser() {
+  if (!stream) return;
+  try {
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+  } catch (_) {}
+}
+
+/* ============================================================
+ * Wake word engine ("Hey Bluey")
+ *
+ * Two spotters depending on the brain:
+ *  - scripted brain: Chromium's built-in speech recognition (free, needs
+ *    internet, no key). Final transcripts go to main for wake-word matching.
+ *  - openai brain: RMS voice-activity gate captures utterance clips,
+ *    main transcribes them with Whisper and checks the wake word itself.
+ * Both are muted while Bluey is talking (wake-pause / wake-resume).
+ * ============================================================ */
+
+let wake = {
+  active: false, paused: false, openai: false,
+  recog: null, recogAlive: false, netErrs: 0, lastHeard: 0,
+  timer: null, speechFrames: 0, silenceFrames: 0,
+  cap: null, capChunks: [], capStartedAt: 0
+};
+
+async function wakeStart(msg) {
+  wakeStopEngine();                 // idempotent restart
+  wake.active = true;
+  wake.paused = false;
+  wake.openai = !!msg.openai;
+  await ensureMic();
+  if (!analyser) setupAnalyser();
+  if (wake.timer) clearInterval(wake.timer);
+  wake.timer = setInterval(wakeVadTick, 90);
+  if (!wake.openai) wakeStartRecog();  // scripted brain: free Chromium spotter
+}
+
+function wakeStopEngine() {
+  wake.active = false;
+  wake.paused = false;
+  if (wake.timer) { clearInterval(wake.timer); wake.timer = null; }
+  if (wake.recog) { try { wake.recog.onend = null; wake.recog.abort(); } catch (_) {} wake.recog = null; }
+  wake.recogAlive = false;
+  wakeCancelCapture();
+}
+
+function wakePaused(p) {
+  wake.paused = p;
+  if (p) {
+    if (wake.recog) { try { wake.recog.abort(); } catch (_) {} }
+    wakeCancelCapture();
+  } else if (wake.active && !wake.openai && !wake.recogAlive) {
+    setTimeout(() => { if (wake.active && !wake.paused && !wake.recogAlive) wakeStartRecog(); }, 300);
+  }
+}
+
+/* ---------- spotter 1: Chromium speech recognition (scripted brain) ---------- */
+
+function wakeStartRecog() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { window.recAPI.wakeError('no-speech-api'); return; }
+  let r;
+  try { r = new SR(); } catch (_) { window.recAPI.wakeError('no-speech-api'); return; }
+  r.continuous = true;
+  r.interimResults = true;
+  r.lang = 'en-US';
+  r.onresult = (ev) => {
+    let line = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      if (ev.results[i].isFinal) line += ev.results[i][0].transcript;
+    }
+    line = line.trim();
+    wake.netErrs = 0;
+    if (line && Date.now() - wake.lastHeard > 1200) {
+      wake.lastHeard = Date.now();
+      window.recAPI.wakeHeard(line);
+    }
+  };
+  r.onerror = (ev) => {
+    if (ev.error === 'network' || ev.error === 'service-not-allowed') {
+      if (++wake.netErrs === 2) window.recAPI.wakeError('network');
+    } else if (ev.error === 'not-allowed' || ev.error === 'audio-capture') {
+      window.recAPI.wakeError('permission');
+    }
+    // 'no-speech', 'aborted' etc. are routine - onend restarts
+  };
+  r.onend = () => {
+    wake.recogAlive = false;
+    wake.recog = null;
+    if (wake.active && !wake.paused) {
+      const wait = wake.netErrs > 0 ? 5000 : 350;   // back off after network errors
+      setTimeout(() => { if (wake.active && !wake.paused && !wake.recogAlive) wakeStartRecog(); }, wait);
+    }
+  };
+  try { r.start(); wake.recog = r; wake.recogAlive = true; } catch (_) {}
+}
+
+/* ---------- spotter 2: RMS voice-activity capture (openai brain) ---------- */
+
+function wakeVadTick() {
+  if (!analyser || !wake.active) return;
+  const buf = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+  const rms = Math.sqrt(sum / buf.length);
+  window.recAPI.level(rms);
+  if (wake.paused) return;
+  if (!wake.openai) return;   // scripted mode: the speech spotter handles utterances
+  const START = 0.055, STOP = 0.032, SILENCE_FRAMES = 13, MAX_MS = 8000;
+  if (!wake.cap) {
+    if (rms > START) {
+      if (++wake.speechFrames >= 3) { wake.speechFrames = 0; startWakeCapture(); }
+    } else wake.speechFrames = 0;
+  } else {
+    if (rms > STOP) wake.silenceFrames = 0; else wake.silenceFrames++;
+    if (wake.silenceFrames >= SILENCE_FRAMES || Date.now() - wake.capStartedAt > MAX_MS) {
+      finishWakeCapture();
+    }
+  }
+}
+
+async function startWakeCapture() {
+  if (!stream || wake.cap) return;
+  try {
+    wake.capChunks = [];
+    wake.cap = new MediaRecorder(stream, mimeType() ? { mimeType: mimeType() } : undefined);
+    wake.cap.ondataavailable = (e) => { if (e.data && e.data.size) wake.capChunks.push(e.data); };
+    wake.cap.start(250);
+    wake.capStartedAt = Date.now();
+    wake.silenceFrames = 0;
+  } catch (_) { wake.cap = null; }
+}
+
+async function finishWakeCapture() {
+  const mr = wake.cap;
+  const startedAt = wake.capStartedAt;
+  wake.cap = null;
+  if (!mr) return;
+  await new Promise((res) => {
+    mr.onstop = res;
+    try { mr.stop(); } catch (_) { res(); }
+    setTimeout(res, 1200);
+  });
+  const blob = new Blob(wake.capChunks, { type: mr.mimeType || 'audio/webm' });
+  wake.capChunks = [];
+  if (blob.size < 2000) return;   // too tiny to be speech
+  let rms = 0.05;
+  try {
+    const ctx = new AudioContext();
+    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    rms = rmsOfBuffer(decoded);
+    ctx.close();
+  } catch (_) {}
+  window.recAPI.wakeClip({ data: new Uint8Array(await blob.arrayBuffer()), durationMs: Date.now() - startedAt, rms });
+}
+
+function wakeCancelCapture() {
+  if (wake.cap) {
+    try { wake.cap.ondataavailable = null; wake.cap.stop(); } catch (_) {}
+    wake.cap = null;
+  }
+  wake.capChunks = [];
+  wake.speechFrames = 0;
+  wake.silenceFrames = 0;
+}
+</script>
+</body>
+</html>

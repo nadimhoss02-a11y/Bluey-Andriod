@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Bluey" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/bluey_blue</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="android:windowBackground">@drawable/bg_gradient</item>
+        <item name="android:statusBarColor">@color/bg_bottom</item>
+        <item name="android:navigationBarColor">@color/bg_bottom</item>
+    </style>
+</resources>

@@ -1,0 +1,131 @@
+html, body {
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+.hidden { opacity: 0 !important; pointer-events: none !important; }
+
+/* ---------- character ---------- */
+
+#bluey {
+  position: absolute;
+  width: 160px; height: 190px;
+  left: 120px; bottom: 20px;
+  transition: filter .3s;
+  will-change: transform;
+}
+
+#body { position: absolute; inset: 0; animation: bob 3.2s ease-in-out infinite; }
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+#berry { width: 100%; height: 100%; }
+
+#glow {
+  position: absolute; inset: -18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(120,150,255,.45) 0%, rgba(120,150,255,0) 70%);
+  opacity: 1; transition: opacity .4s;
+  pointer-events: none;
+}
+#bluey.noglow #glow { opacity: 0; }
+
+/* feet */
+.foot {
+  position: absolute; bottom: -2px; width: 34px; height: 14px;
+  background: #26378c; border-radius: 50%;
+  animation: walk 3.2s ease-in-out infinite;
+}
+.foot-l { left: 44px; }
+.foot-r { right: 44px; animation-delay: -1.6s; }
+@keyframes walk {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* eyes */
+
+#eyeL .white, #eyeR .white { transition: transform .12s; }
+#bluey.blink #eyeL .white, #bluey.blink #eyeR .white { transform: scaleY(0.08); }
+
+#bluey.sleeping #eyeL .white, #bluey.sleeping #eyeR .white { transform: scaleY(0.1); }
+#bluey.sleeping #mouth { opacity: .3; }
+#bluey.sleeping #body { animation-duration: 5s; }
+
+.pupil { will-change: transform; }
+
+/* moods (mouth shapes) */
+#bluey.mood-happy #mouth { d: path("M 86 148 Q 102 160 118 148"); }
+#bluey.mood-excitable #mouth { d: path("M 84 146 Q 102 166 120 146"); }
+#bluey.mood-sleepy #mouth { d: path("M 90 150 Q 102 156 114 150"); }
+#bluey.mood-grumpy #mouth { d: path("M 86 156 Q 102 144 118 156"); }
+
+/* ---------- speech bubble ---------- */
+
+#bubble {
+  position: absolute;
+  bottom: 168px; left: 50%;
+  transform: translateX(-50%);
+  min-width: 120px; max-width: 420px;
+  background: #ffffff;
+  color: #1c2540;
+  font: 600 15px/1.4 'Segoe UI', system-ui, sans-serif;
+  padding: 12px 16px;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(20,30,80,.35);
+  opacity: 1; transition: opacity .25s;
+  pointer-events: none;
+  z-index: 5;
+}
+#bubble .tail {
+  position: absolute; bottom: -9px; left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 11px solid #ffffff;
+}
+#bubble.left .tail { left: 20%; }
+
+/* ---------- listening waves ---------- */
+
+#waves {
+  position: absolute; bottom: -30px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; gap: 5px; align-items: flex-end;
+  height: 26px;
+}
+#waves span {
+  width: 5px; height: 8px;
+  background: #9db4ff; border-radius: 3px;
+  animation: wave .7s ease-in-out infinite;
+}
+#waves span:nth-child(2) { animation-delay: .15s; }
+#waves span:nth-child(3) { animation-delay: .3s; }
+@keyframes wave {
+  0%, 100% { height: 7px; }
+  50% { height: 24px; }
+}
+
+/* ---------- pointing cursor ---------- */
+
+#pointer {
+  position: absolute; left: 0; top: 0;
+  width: 34px; height: 34px;
+  z-index: 9;
+  filter: drop-shadow(0 3px 8px rgba(20,30,80,.5));
+  transition: opacity .2s;
+  will-change: transform;
+}
+#pointer.wiggle { animation: wig .35s ease-in-out 4; }
+@keyframes wig {
+  0%, 100% { rotate: 0deg; }
+  50% { rotate: -14deg; }
+}

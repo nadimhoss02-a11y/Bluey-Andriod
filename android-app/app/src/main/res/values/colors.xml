@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_top">#141a30</color>
+    <color name="bg_bottom">#0c101f</color>
+    <color name="bluey_blue">#5470e8</color>
+    <color name="bluey_dark">#2c3f9e</color>
+    <color name="accent">#9db4ff</color>
+    <color name="card">#1a2140</color>
+    <color name="text_main">#e8edff</color>
+    <color name="text_dim">#8fa0cc</color>
+    <color name="launcher_bg">#101423</color>
+</resources>

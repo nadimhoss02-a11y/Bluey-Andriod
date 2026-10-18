@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  .card {
+    margin: 10px; height: calc(100% - 20px);
+    background: rgba(18, 24, 48, 0.92);
+    border: 1px solid rgba(140,165,255,.35);
+    border-radius: 16px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    box-shadow: 0 8px 30px rgba(5,10,30,.5);
+  }
+  img { width: 40px; height: 40px; }
+  input {
+    flex: 1; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(140,165,255,.3);
+    border-radius: 10px; outline: none;
+    color: #eef2ff; font: 500 14px 'Segoe UI', sans-serif;
+    padding: 9px 12px;
+  }
+  input::placeholder { color: rgba(220,230,255,.45); }
+  input:focus { border-color: rgba(160,185,255,.7); }
+  .send {
+    background: #5470e8; color: white; border: none;
+    border-radius: 10px; padding: 9px 14px;
+    font: 600 13px 'Segoe UI', sans-serif; cursor: pointer;
+  }
+  .send:hover { background: #6a83f2; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="berry-mini.svg" alt="">
+    <input id="box" type="text" placeholder="Type to Bluey… (try: open notepad, point at chrome, tell me a joke)" autofocus>
+    <button class="send" id="go">Send</button>
+  </div>
+  <script>
+    const box = document.getElementById('box');
+    function submit() {
+      const t = box.value.trim();
+      if (!t) return;
+      window.chat.send(t);
+      box.value = '';
+      box.placeholder = 'Bluey is thinking…';
+    }
+    document.getElementById('go').addEventListener('click', submit);
+    box.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') window.chat.close(); });
+    window.chat.onReply(() => { box.placeholder = 'Type to Bluey…'; });
+  </script>
+</body>
+</html>

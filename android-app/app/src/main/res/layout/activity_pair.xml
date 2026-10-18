@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="22dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Pair with your PC"
+            android:textColor="@color/text_main"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="18dp"
+            android:text="1. Install Bluey on your Windows PC and make sure phone + PC are on the same Wi-Fi.\n2. Find your PC below (or type its IP — shown in Bluey Settings → Phone companion).\n3. Enter the 4-digit pairing code."
+            android:textColor="@color/text_dim"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:text="Discovered PCs"
+            android:textColor="@color/accent"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <ListView
+            android:id="@+id/deviceList"
+            android:layout_width="match_parent"
+            android:layout_height="170dp"
+            android:background="@drawable/card_bg"
+            android:divider="#2c3763"
+            android:dividerHeight="1dp"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/discoverStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Searching for Bluey on your network…"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:layout_marginBottom="6dp"
+            android:text="Or connect manually"
+            android:textColor="@color/accent"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/etHost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/card_bg"
+            android:hint="PC IP address, e.g. 192.168.1.42"
+            android:inputType="text"
+            android:padding="14dp"
+            android:textColor="@color/text_main"
+            android:textColorHint="@color/text_dim" />
+
+        <EditText
+            android:id="@+id/etPort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/card_bg"
+            android:hint="Port (default 8787)"
+            android:inputType="number"
+            android:padding="14dp"
+            android:text="8787"
+            android:textColor="@color/text_main"
+            android:textColorHint="@color/text_dim" />
+
+        <EditText
+            android:id="@+id/etCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/card_bg"
+            android:hint="4-digit pairing code (see PC settings)"
+            android:inputType="number"
+            android:maxLength="4"
+            android:padding="14dp"
+            android:textColor="@color/text_main"
+            android:textColorHint="@color/text_dim" />
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/btn_talk"
+            android:backgroundTint="@null"
+            android:text="Connect"
+            android:textColor="#ffffff"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/connectStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:textColor="@color/text_dim"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnForget"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="10dp"
+            android:background="@android:color/transparent"
+            android:text="Forget saved PC"
+            android:textColor="@color/text_dim" />
+    </LinearLayout>
+</ScrollView>

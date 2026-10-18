@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px 20px 90px;
+    background: #101423; color: #e8edff;
+    font: 14px/1.5 'Segoe UI', system-ui, sans-serif;
+    overflow-y: auto;
+  }
+  h1 { font-size: 19px; margin: 0 0 2px; display: flex; align-items: center; gap: 10px; }
+  h1 img { width: 30px; height: 30px; }
+  .sub { color: #8fa0cc; font-size: 12.5px; margin-bottom: 16px; }
+  h2 {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: #7f92c6; margin: 22px 0 8px;
+    border-bottom: 1px solid #232c4d; padding-bottom: 6px;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 9px 0; }
+  .row label { flex: 1; }
+  .hint { color: #7686b5; font-size: 11.5px; margin-top: 2px; }
+  input[type=range] { width: 180px; accent-color: #6a83f2; }
+  input[type=checkbox] { width: 17px; height: 17px; accent-color: #6a83f2; }
+  select, input[type=text], input[type=password], input[type=number] {
+    background: #1a2140; color: #e8edff; border: 1px solid #2c3763;
+    border-radius: 8px; padding: 7px 10px; font: inherit; max-width: 230px;
+  }
+  input[type=text]:focus, input[type=password]:focus { border-color: #6a83f2; outline: none; }
+  .code {
+    font: 700 20px 'Consolas', monospace; letter-spacing: .3em;
+    background: #1a2140; border: 1px dashed #3d4b85; color: #9db4ff;
+    padding: 6px 14px; border-radius: 8px;
+  }
+  .badge { font-size: 11px; padding: 3px 9px; border-radius: 20px; font-weight: 700; }
+  .ok { background: #143a24; color: #55e08a; }
+  .off { background: #3a2314; color: #f0a35e; }
+  button {
+    background: #2c3763; color: #e8edff; border: 1px solid #3d4b85;
+    border-radius: 8px; padding: 7px 14px; font: 600 13px inherit; cursor: pointer;
+  }
+  button:hover { background: #3a4780; }
+  #save {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 62px; display: flex; align-items: center; justify-content: flex-end;
+    padding: 0 20px; gap: 12px;
+    background: rgba(13,17,32,.95); border-top: 1px solid #232c4d;
+  }
+  #save button.primary { background: #5470e8; border-color: #5470e8; padding: 10px 26px; }
+  #save button.primary:hover { background: #6a83f2; }
+  #saved { color: #55e08a; font-weight: 600; opacity: 0; transition: opacity .3s; }
+  .warn { color: #f0c95e; font-size: 11.5px; }
+</style>
+</head>
+<body>
+  <h1><img src="../overlay/berry-mini.svg"> Bluey Settings</h1>
+  <div class="sub">Your berry buddy · config lives in your user folder, nothing is sent anywhere unless you add a key.</div>
+
+  <h2>Character</h2>
+  <div class="row"><label>Size <span class="hint" id="sizeVal"></span></label><input type="range" id="size" min="80" max="220" step="5"></div>
+  <div class="row"><label>Glow effect</label><input type="checkbox" id="glow"></div>
+  <div class="row"><label>Mood</label>
+    <select id="mood">
+      <option value="happy">Happy</option>
+      <option value="excitable">Excitable</option>
+      <option value="sleepy">Sleepy</option>
+      <option value="grumpy">Grumpy</option>
+    </select>
+  </div>
+  <div class="row"><label>Follow my mouse</label><input type="checkbox" id="follow"></div>
+  <div class="row"><label>Idle chatter <span class="hint">random comments now and then</span></label><input type="checkbox" id="idleChatter"></div>
+
+  <h2>Voice</h2>
+  <div class="row"><label>Speak replies out loud</label><input type="checkbox" id="voice"></div>
+  <div class="row"><label>Volume <span class="hint" id="volumeVal"></span></label><input type="range" id="volume" min="0" max="100" step="5"></div>
+  <div class="row"><label>Voice</label><select id="voiceName"></select></div>
+  <div class="row"><label>Voice activation</label>
+    <select id="voiceMode">
+      <option value="ptt">Push-to-talk (Alt+Space)</option>
+      <option value="wake">Wake word - always listening</option>
+      <option value="off">Off</option>
+    </select>
+  </div>
+  <div class="row"><label>Wake phrase <span class="hint">she also answers to just her name</span></label>
+    <input type="text" id="wakeWord" placeholder="hey bluey" style="width:170px">
+  </div>
+  <div class="hint" id="wakeNote">Wake word listens for her name, then runs your command - try "Hey Bluey, open notepad" or "Hey Bluey, point at Spotify". She goes deaf while she's speaking and during meetings. Mic is only used on this PC.</div>
+
+  <h2>Brain</h2>
+  <div class="row"><label>Offline personality <span class="hint">no key needed</span></label><input type="radio" name="brain" value="scripted" checked></div>
+  <div class="row"><label>OpenAI <span class="hint">voice chat that truly understands</span></label><input type="radio" name="brain" value="openai"></div>
+  <div class="row"><label>API key</label><input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off"></div>
+  <div class="row"><label>Model</label><input type="text" id="openaiModel" placeholder="gpt-4o-mini"></div>
+  <div class="warn" id="brainNote">Key is stored locally on your PC only. Scripted mode still supports all PC-control commands via chat.</div>
+
+  <h2>PC control</h2>
+  <div class="row"><label>Let Bluey click / type / scroll / open apps <span class="hint">PowerShell based, Windows 10/11</span></label><input type="checkbox" id="controlEnabled"></div>
+
+  <h2>Phone companion</h2>
+  <div class="row"><label>Wi-Fi server <span class="hint" id="phoneStatus"></span></label><input type="checkbox" id="serverEnabled"></div>
+  <div class="row"><label>PC IP address</label><span class="hint" id="pcIP" style="font-size:13px;color:#9db4ff"></span></div>
+  <div class="row"><label>Port</label><input type="number" id="port" min="1024" max="65535" style="width:110px"></div>
+  <div class="row"><label>Pairing code</label><span class="code" id="pairingCode"></span></div>
+  <div class="hint">On your phone: Bluey app → Pair → pick this PC (same Wi-Fi) or type the IP, then enter the code.</div>
+
+  <h2>Meeting notes</h2>
+  <div class="row"><label>Notes folder</label><button id="openNotes">Open folder</button></div>
+  <div class="hint" id="notesDir"></div>
+
+  <div id="save">
+    <span id="saved">Saved ✓</span>
+    <button class="primary" id="saveBtn">Save</button>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let cfg = {};
+let voices = [];
+
+function loadVoices() {
+  voices = speechSynthesis.getVoices();
+  const sel = $('voiceName');
+  sel.innerHTML = '<option value="">Auto (English)</option>';
+  voices.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.name; o.textContent = `${v.name} (${v.lang})`;
+    sel.appendChild(o);
+  });
+  if (cfg.voiceName) sel.value = cfg.voiceName;
+}
+if ('speechSynthesis' in window) {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+window.settings.get().then((c) => {
+  cfg = c;
+  $('size').value = c.size; $('sizeVal').textContent = c.size + 'px';
+  $('glow').checked = c.glow;
+  $('mood').value = c.mood;
+  $('follow').checked = c.follow;
+  $('idleChatter').checked = c.idleChatter;
+  $('voice').checked = c.voice;
+  $('volume').value = Math.round(c.volume * 100); $('volumeVal').textContent = Math.round(c.volume * 100) + '%';
+  $('voiceMode').value = c.voiceMode || 'ptt';
+  $('wakeWord').value = c.wakeWord || 'hey bluey';
+  if (!('speechSynthesis' in window)) $('voiceName').innerHTML = '<option value="">Default</option>';
+  document.querySelector(`input[name=brain][value=${c.brain === 'openai' ? 'openai' : 'scripted'}]`).checked = true;
+  $('openaiKey').value = c.openaiKey || '';
+  $('openaiModel').value = c.openaiModel || 'gpt-4o-mini';
+  $('controlEnabled').checked = c.controlEnabled;
+  $('serverEnabled').checked = c.serverEnabled;
+  $('port').value = c.port;
+  $('pairingCode').textContent = c.pairingCode;
+  $('pcIP').textContent = c.pcIP;
+  $('notesDir').textContent = c.notesDir;
+  $('phoneStatus').innerHTML = c.phoneConnected
+    ? '<span class="badge ok">phone connected</span>'
+    : '<span class="badge off">no phone yet</span>';
+  if (c.brainMode === 'openai' && c.brainError) {
+    $('brainNote').textContent = 'OpenAI mode had an error (' + c.brainError.slice(0, 80) + ') — falling back to scripted until fixed.';
+  }
+});
+
+$('size').addEventListener('input', () => $('sizeVal').textContent = $('size').value + 'px');
+$('volume').addEventListener('input', () => $('volumeVal').textContent = $('volume').value + '%');
+
+$('saveBtn').addEventListener('click', () => {
+  window.settings.save({
+    size: Number($('size').value),
+    glow: $('glow').checked,
+    mood: $('mood').value,
+    follow: $('follow').checked,
+    idleChatter: $('idleChatter').checked,
+    voice: $('voice').checked,
+    volume: Number($('volume').value) / 100,
+    voiceName: $('voiceName').value,
+    voiceMode: $('voiceMode').value,
+    wakeWord: $('wakeWord').value.trim() || 'hey bluey',
+    brain: document.querySelector('input[name=brain]:checked').value,
+    openaiKey: $('openaiKey').value.trim(),
+    openaiModel: $('openaiModel').value.trim() || 'gpt-4o-mini',
+    controlEnabled: $('controlEnabled').checked,
+    serverEnabled: $('serverEnabled').checked,
+    port: Number($('port').value) || 8787
+  });
+  $('saved').style.opacity = 1;
+  setTimeout(() => $('saved').style.opacity = 0, 1600);
+});
+
+$('openNotes').addEventListener('click', () => window.settings.openNotes());
+</script>
+</body>
+</html>
