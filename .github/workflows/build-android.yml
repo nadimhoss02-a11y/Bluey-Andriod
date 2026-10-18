@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# a newer push supersedes a build that is still running
+concurrency:
+  group: build-android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
