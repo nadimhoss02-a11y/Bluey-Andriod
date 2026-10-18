@@ -13,7 +13,11 @@
         </intent>
     </queries>
 
+    <!-- Bluey talks to the PC over plain ws:// on the local Wi-Fi (the PC has no TLS certificate).
+         Since Android 9 cleartext traffic is blocked unless the app opts in, which broke pairing.
+         The app makes no other network calls: speech and TTS run through the system services. -->
     <application
+        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
