@@ -45,6 +45,17 @@ const ACTIONS = {
  * Wake word helper
  * ============================================================ */
 
+/** strip ONE matching pair of surrounding quotes: "hello" / 'hello' / “hello” */
+function unquote(s) {
+  const t = String(s).trim();
+  const pairs = { '"': '"', "'": "'", '“': '”', '‘': '’' };
+  if (t.length >= 2 && pairs[t[0]] === t[t.length - 1]) {
+    const inner = t.slice(1, -1);
+    if (!inner.includes(pairs[t[0]])) return inner;   // one quoted phrase; leave '"a" and "b"' alone
+  }
+  return t;
+}
+
 /**
  * Try to strip a wake phrase ("hey bluey", "ok bluey", or just "bluey")
  * from a transcript. The keyword is the last word of the configured phrase.
@@ -54,12 +65,14 @@ const ACTIONS = {
  *   bare    - ONLY the wake word was said ("hey bluey" and nothing else)
  */
 function stripWakeWord(text, phrase = 'hey bluey') {
-  const t = String(text || '').trim().toLowerCase().replace(/^["']+|["'.!?,,]+$/g, '');
+  const t = String(text || '').trim().toLowerCase().replace(/^["'“‘]+|["'”’.!?,]+$/g, '');
   if (!t) return { matched: false, rest: '', bare: false };
   const words = String(phrase || '').toLowerCase().split(/\s+/).filter(Boolean);
   const kw = (words[words.length - 1] || 'bluey').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:hey|hi|ok|okay|yo|hello|alright|so)\\s+${kw}\\b[,!]*\\s*(.*)$` +
-                        `|^(?:hey|hi|ok|okay|yo|hello|so)?\\s*${kw}\\b[,!]*\\s*(.*)$`, 'i');
+  // speech engines love to insert a comma: "Hey, Bluey" / "Okay. Bluey"
+  const sep = '[\\s,.:;-]+';
+  const re = new RegExp(`^(?:hey|hi|ok|okay|yo|hello|alright|so)${sep}${kw}\\b[,!.]*\\s*(.*)$` +
+                        `|^${kw}\\b[,!.]*\\s*(.*)$`, 'i');
   const m = t.match(re);
   if (!m) return { matched: false, rest: '', bare: false };
   const rest = (m[1] !== undefined ? m[1] : (m[2] || '')).trim();
@@ -261,28 +274,42 @@ class ScriptedBrain {
 
     const say = (t, action) => ({ text: t, action: action || { type: ACTIONS.NONE }, say: true });
 
+    // --- commands that carry free text or an app name come FIRST, so the words inside them
+    //     ("type thank you", "open snapchat") can't trip small talk, sleep, etc. ---
+    // "type <text>"  (and  write "<quoted text>").  A bare "write a poem" is NOT typing.
+    const typeMatch = text.match(/^(?:please\s+)?type\s+(?:out\s+)?([\s\S]+)$/i) ||
+                      text.match(/^write\s+(["“][\s\S]+["”])$/i);
+    if (typeMatch) return say(pick(LINES.typed), { type: ACTIONS.TYPE, text: unquote(typeMatch[1]) });
+
+    // --- meetings (before "open" so "start meeting" isn't eaten) ---
+    if (/(start|begin) (a |the )?(meeting|recording)/.test(low)) return say(pick(LINES.meeting), { type: ACTIONS.MEETING, start: true });
+    if (/(stop|end) (a |the )?(meeting|recording)/.test(low)) return say("Notes saved! Check Documents → Bluey Notes.", { type: ACTIONS.MEETING, start: false });
+
+    // --- open apps ---
+    const openMatch = low.match(/^(?:please\s+)?(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?(.+)$/);
+    if (openMatch && !/\bfollowing\b/.test(low)) {
+      const app = openMatch[1].replace(/\bfor me\b|\bplease\b/g, '').trim();
+      return say(pick(LINES.opened), { type: ACTIONS.OPEN, app });
+    }
+
     // --- greetings & smalltalk ---
     if (/^(hi|hey|hello|yo|sup|hiya|heyo)\b/.test(low)) return say(pick(LINES.greet));
     if (/(who are you|what are you|your name)/.test(low)) return say(pick(LINES.who));
     if (/(how are you|how's it going|hows it going|how you doing)/.test(low)) return say(pick(LINES.how));
     if (/(tell me a joke|another joke|make me laugh|say a joke)/.test(low)) return say(pick(LINES.joke));
-    if (/(thank|thanks|thx)/.test(low)) return say(pick(LINES.thanks));
-    if (/(bye|goodbye|see you|good night|goodnight)/.test(low)) return say(pick(LINES.bye));
-    if (/(i love you|love you)/.test(low)) return say(pick(LINES.love));
+    if (/\b(thank you|thanks|thank|thx)\b/.test(low)) return say(pick(LINES.thanks));
+    if (/\b(bye|goodbye|see you|good night|goodnight)\b/.test(low)) return say(pick(LINES.bye));
+    if (/\b(i love you|love you)\b/.test(low)) return say(pick(LINES.love));
     if (/(you('re| are) (great|awesome|amazing|cute|the best)|good (berry|job|boy))/.test(low)) return say(pick(LINES.praise));
     if (/(you('re| are) (dumb|stupid|useless|bad)|stupid berry|hate you)/.test(low)) return say(pick(LINES.insult));
 
     // --- sleep / wake ---
-    if (/(go to sleep|nap|go to bed|shut eye|sleep now)/.test(low)) return say(pick(LINES.sleep), { type: ACTIONS.SLEEP });
-    if (/(wake up|are you asleep|wakey)/.test(low)) return say(pick(LINES.wake), { type: ACTIONS.WAKE });
+    if (/\b(go to sleep|nap|go to bed|shut eye|sleep now)\b/.test(low)) return say(pick(LINES.sleep), { type: ACTIONS.SLEEP });
+    if (/\b(wake up|are you asleep|wakey)\b/.test(low)) return say(pick(LINES.wake), { type: ACTIONS.WAKE });
 
     // --- follow ---
     if (/(follow me|follow my (mouse|cursor)|come with me)/.test(low)) return say(pick(LINES.followOn), { type: ACTIONS.FOLLOW, on: true });
-    if (/(stay|stop following|stay put|sit still)/.test(low)) return say(pick(LINES.followOff), { type: ACTIONS.FOLLOW, on: false });
-
-    // --- meetings (before "open" so "start meeting" isn't eaten) ---
-    if (/(start|begin) (a |the )?(meeting|recording)/.test(low)) return say(pick(LINES.meeting), { type: ACTIONS.MEETING, start: true });
-    if (/(stop|end) (a |the )?(meeting|recording)/.test(low)) return say("Notes saved! Check Documents → Bluey Notes.", { type: ACTIONS.MEETING, start: false });
+    if (/\b(stay|stop following|stay put|sit still)\b/.test(low)) return say(pick(LINES.followOff), { type: ACTIONS.FOLLOW, on: false });
 
     // --- movement ---
     if (/(come here|come over|move left)/.test(low)) return say(pick(LINES.moved), { type: ACTIONS.POINT, target: 'mouse', moveSelf: true });
@@ -309,10 +336,6 @@ class ScriptedBrain {
     if (/right.?click/.test(low)) return say(pick(LINES.clicked), { type: ACTIONS.CLICK, kind: 'right' });
     if (/\bclick\b|\bpress it\b|boop (it|that)/.test(low)) return say(pick(LINES.clicked), { type: ACTIONS.CLICK, kind: 'left' });
 
-    // --- typing ---
-    const typeMatch = text.match(/^(?:type|write|enter)\s+"?([\s\S]+)"?$/i);
-    if (typeMatch) return say(pick(LINES.typed), { type: ACTIONS.TYPE, text: typeMatch[1] });
-
     // --- scroll ---
     const scrollMatch = low.match(/scroll (up|down)(?: (\d+))?/);
     if (scrollMatch) {
@@ -321,21 +344,14 @@ class ScriptedBrain {
       return say(pick(LINES.scrolled), { type: ACTIONS.SCROLL, clicks: amount });
     }
 
-    // --- open apps ---
-    const openMatch = low.match(/^(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+)?(.+)$/);
-    if (openMatch && !/meeting|recording/.test(low)) {
-      const app = openMatch[1].replace(/\bfor me\b|\bplease\b/g, '').trim();
-      return say(pick(LINES.opened), { type: ACTIONS.OPEN, app });
-    }
-
     // --- what's on screen ---
     if (/(what('| i)?s on my screen|what do you see|read my screen|list (my )?windows|what windows)/.test(low)) {
       return say("Scanning your kingdom...", { type: ACTIONS.WINDOWS });
     }
 
     // --- size ---
-    if (/(get )?bigger|grow/.test(low)) return say("BIGGER BERRY!", { type: ACTIONS.SIZE, delta: 30 });
-    if (/(get )?smaller|shrink/.test(low)) return say("Smol mode.", { type: ACTIONS.SIZE, delta: -30 });
+    if (/\b(bigger|grow)\b/.test(low)) return say("BIGGER BERRY!", { type: ACTIONS.SIZE, delta: 30 });
+    if (/\b(smaller|shrink)\b/.test(low)) return say("Smol mode.", { type: ACTIONS.SIZE, delta: -30 });
 
     // fallback
     if (/\?\s*$/.test(text)) {

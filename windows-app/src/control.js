@@ -5,11 +5,19 @@
  * so there are ZERO native npm dependencies to compile. Works on stock Windows 10/11.
  *
  * On non-Windows platforms every call no-ops gracefully (so devs on mac/linux can run the UI).
+ *
+ * Safety notes:
+ *  - Scripts are handed to PowerShell as -EncodedCommand (base64 UTF-16), and any user-supplied
+ *    text (what to type, which app to open) is embedded as base64 too, so it is never parsed as
+ *    PowerShell code - typographic quotes, backticks, $(...) etc. are all just data.
+ *  - openApp only launches plain program names (or a known alias), never paths or URLs.
  */
 const { spawn } = require('child_process');
 const os = require('os');
 
 const IS_WINDOWS = os.platform() === 'win32';
+
+const MAX_TYPE_CHARS = 4000;
 
 function ps(script, timeoutMs = 6000) {
   return new Promise((resolve) => {
@@ -18,8 +26,10 @@ function ps(script, timeoutMs = 6000) {
       return;
     }
     let out = '', err = '', done = false;
+    // (no progress records: they would otherwise show up on stderr as CLIXML noise)
+    const encoded = Buffer.from("$ProgressPreference = 'SilentlyContinue'\n" + script, 'utf16le').toString('base64');
     const child = spawn('powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
       { windowsHide: true });
     const timer = setTimeout(() => {
       if (!done) { done = true; try { child.kill(); } catch (_) {} resolve({ ok: false, reason: 'timeout', stdout: out, stderr: err }); }
@@ -38,70 +48,88 @@ function ps(script, timeoutMs = 6000) {
   });
 }
 
+/** like ps(), but any error inside the script makes the result ok:false (instead of being swallowed) */
+function psStrict(script, timeoutMs) {
+  return ps("$ErrorActionPreference = 'Stop'\n" + script, timeoutMs);
+}
+
+const b64 = (s) => Buffer.from(String(s), 'utf8').toString('base64');
+
 /* ---------- mouse ---------- */
 
+const MOUSE_DLL = `Add-Type -Namespace W -Name M -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);'`;
+const mouseEvent = (flag, data = '0') => `[W.M]::mouse_event(${flag}, 0, 0, ${data}, [UIntPtr]::Zero)`;
+
 function moveMouse(x, y) {
-  return ps(`
+  return psStrict(`
 Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);'
 [W.U]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null
 'ok'`);
 }
 
-async function click(kind = 'left') {
-  let flags;
-  if (kind === 'right') flags = '0x0008, 0x0010';       // RIGHTDOWN, RIGHTUP
-  else if (kind === 'middle') flags = '0x0020, 0x0040'; // MIDDLEDOWN, MIDDLEUP
-  else flags = '0x0002, 0x0004';                        // LEFTDOWN, LEFTUP
-  const r = await ps(`
-Add-Type -Namespace W -Name M -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);'
-[W.M]::mouse_event(${flags}, 0, 0, 0, [UIntPtr]::Zero)`);
-  if (kind === 'double' && r.ok) {
-    await new Promise(res => setTimeout(res, 60));
-    await ps(`
-Add-Type -Namespace W -Name M -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);'
-[W.M]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero); [W.M]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)`);
-  }
-  return r;
+/** build the PowerShell for a click. All the button events go out in ONE script so a double-click
+ *  stays inside Windows' double-click window (separate PowerShell launches are ~1s+ apart). */
+function buildClickScript(kind = 'left') {
+  const LEFT = ['0x0002', '0x0004'], RIGHT = ['0x0008', '0x0010'], MIDDLE = ['0x0020', '0x0040'];
+  const pair = (p) => [mouseEvent(p[0]), mouseEvent(p[1])];
+  let lines;
+  if (kind === 'right') lines = pair(RIGHT);
+  else if (kind === 'middle') lines = pair(MIDDLE);
+  else if (kind === 'double') lines = [...pair(LEFT), 'Start-Sleep -Milliseconds 40', ...pair(LEFT)];
+  else lines = pair(LEFT);
+  return `${MOUSE_DLL}\n${lines.join('\n')}\n'ok'`;
+}
+
+function click(kind = 'left') {
+  return psStrict(buildClickScript(kind));
 }
 
 /* ---------- keyboard ---------- */
 
-function escapeSendKeys(text) {
-  // escape SendKeys special chars: +^%~(){}[]
-  return text.replace(/([+^%~(){}[\]])/g, '{$1}').replace(/'/g, "''");
+/** PowerShell that types `text` into the focused window. The text travels as base64 and SendKeys'
+ *  special characters (+ ^ % ~ ( ) { } [ ]) are escaped inside PowerShell. */
+function buildTypeScript(text) {
+  const t = String(text).replace(/\r\n/g, '\n').slice(0, MAX_TYPE_CHARS);
+  return `
+Add-Type -AssemblyName System.Windows.Forms
+$t = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(t)}'))
+$t = [regex]::Replace($t, '([+^%~(){}\\[\\]])', '{$1}')
+[System.Windows.Forms.SendKeys]::SendWait($t)
+'ok'`;
 }
 
 function typeText(text) {
   if (!text) return { ok: true, reason: 'ok', stdout: 'ok', stderr: '' };
-  const esc = escapeSendKeys(String(text));
-  return ps(`
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.SendKeys]::SendWait('${esc}')
-'ok'`, 15000);
+  return psStrict(buildTypeScript(text), 20000);
 }
 
+const KEYS = {
+  enter: '{ENTER}', esc: '{ESC}', tab: '{TAB}', space: ' ',
+  up: '{UP}', down: '{DOWN}', left: '{LEFT}', right: '{RIGHT}',
+  backspace: '{BACKSPACE}', delete: '{DELETE}', home: '{HOME}', end: '{END}'
+};
+
 function pressKey(key) {
-  const allowed = {
-    enter: '{ENTER}', esc: '{ESC}', tab: '{TAB}', space: ' ',
-    up: '{UP}', down: '{DOWN}', left: '{LEFT}', right: '{RIGHT}',
-    backspace: '{BACKSPACE}', delete: '{DELETE}', home: '{HOME}', end: '{END}'
-  };
-  const k = allowed[String(key || '').toLowerCase()] || null;
+  const k = KEYS[String(key || '').toLowerCase()] || null;
   if (!k) return { ok: false, reason: 'unknown key', stdout: '', stderr: 'unknown key' };
-  return ps(`
+  return psStrict(`
 Add-Type -AssemblyName System.Windows.Forms
 [System.Windows.Forms.SendKeys]::SendWait('${k}')
 'ok'`);
 }
 
 /* ---------- scroll ---------- */
+
 /** clicks: positive = down, negative = up */
+function buildScrollScript(clicks = 3) {
+  const delta = -Math.round(clicks) * 120; // WHEEL_DELTA; negative = wheel toward the user = scroll down
+  // mouse_event's dwData is a uint: a negative delta has to be passed as its two's-complement bit pattern
+  const data = `[uint32]([BitConverter]::ToUInt32([BitConverter]::GetBytes([int]${delta}), 0))`;
+  return `${MOUSE_DLL}\n${mouseEvent('0x0800', data)}\n'ok'`;
+}
+
 function scroll(clicks = 3) {
-  const delta = -Math.round(clicks) * 120; // WHEEL_DELTA
-  return ps(`
-Add-Type -Namespace W -Name S -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);'
-[W.S]::mouse_event(0x0800, 0, 0, ${delta}, [UIntPtr]::Zero)
-'ok'`);
+  return psStrict(buildScrollScript(clicks));
 }
 
 /* ---------- apps ---------- */
@@ -119,11 +147,23 @@ const APP_MAP = {
   settings: 'ms-settings:', calculatorapp: 'calc'
 };
 
+/** known alias, or a plain program name ("snippingtool", "obs64"); anything that looks like a
+ *  path, URL, argument list or script is refused. */
+function resolveAppTarget(nameRaw) {
+  const raw = String(nameRaw || '').trim();
+  const key = raw.toLowerCase().replace(/\.exe$/, '');
+  if (!key) return null;
+  if (Object.prototype.hasOwnProperty.call(APP_MAP, key)) return APP_MAP[key];
+  if (!/^[a-z0-9][a-z0-9 ._+-]{0,38}$/i.test(raw)) return null;
+  return raw;
+}
+
 function openApp(nameRaw) {
-  const name = String(nameRaw || '').trim().toLowerCase();
-  const target = APP_MAP[name] || String(nameRaw || '').trim();
-  return ps(`
-Start-Process -FilePath '${target.replace(/'/g, "''")}' -ErrorAction Stop
+  const target = resolveAppTarget(nameRaw);
+  if (!target) return Promise.resolve({ ok: false, reason: 'blocked-name', stdout: '', stderr: 'not a plain program name' });
+  return psStrict(`
+$n = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(target)}'))
+Start-Process -FilePath $n
 'ok'`, 8000);
 }
 
@@ -178,5 +218,5 @@ module.exports = {
   IS_WINDOWS,
   moveMouse, click, typeText, pressKey, scroll, openApp,
   listWindows, findWindowTarget,
-  _: { ps, noopResult }
+  _: { ps, psStrict, noopResult, buildTypeScript, buildClickScript, buildScrollScript, resolveAppTarget, APP_MAP }
 };

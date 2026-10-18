@@ -19,6 +19,14 @@ const { Recorder } = require('./recorder');
 
 const SELFTEST = process.argv.includes('--selftest');
 
+// Chromium's built-in speech engine (used by the free "Hey Bluey" wake word) only works when a Google
+// API key is present. Electron doesn't ship one, so users can supply their own in Settings -> Voice.
+// It has to be in the environment before the app is ready.
+{
+  const googleKey = String(config.get('googleApiKey') || '').trim();
+  if (googleKey) process.env.GOOGLE_API_KEY = googleKey;
+}
+
 let overlay = null;      // fullscreen transparent character window
 let settingsWin = null;
 let chatWin = null;
@@ -269,6 +277,15 @@ async function handleWakeClip(clip) {
 /** one-time-ish complaints from the wake engine */
 function handleWakeError(kind) {
   const now = Date.now();
+  if (kind === 'unavailable') {
+    // Chromium's speech engine can't run here (no Google speech key). Be upfront and fall back to push-to-talk
+    // so the tray/settings don't claim she is listening when she isn't.
+    config.set('voiceMode', 'ptt');
+    applyVoiceMode();
+    refreshTray();
+    sayToOverlay('The free wake word needs a Google speech key, and this app has none. Alt+Space still works. For hands-free: add an OpenAI key (Settings → Brain) or your own Google API key (Settings → Voice).', { voice: false });
+    return;
+  }
   if (kind === 'permission') {
     sayToOverlay("I can't reach the microphone — check Windows microphone permission for Bluey, then re-enable wake word.", { voice: true });
     config.set('voiceMode', 'ptt');
@@ -358,22 +375,29 @@ async function executeAction(action, opts = {}) {
       case ACTIONS.CLICK: {
         if (!controlAllowed(silent)) return { ok: false, reason: 'disabled' };
         const r = await control.click(action.kind || 'left');
+        if (!r.ok && !silent) sayToOverlay("Hmm, that click didn't go through.", { voice: true });
         return { ok: r.ok };
       }
       case ACTIONS.TYPE: {
         if (!controlAllowed(silent)) return { ok: false, reason: 'disabled' };
         const r = await control.typeText(action.text || '');
+        if (!r.ok && !silent) sayToOverlay("I couldn't type that - Windows said no.", { voice: true });
         return { ok: r.ok };
       }
       case ACTIONS.SCROLL: {
         if (!controlAllowed(silent)) return { ok: false, reason: 'disabled' };
         const r = await control.scroll(action.clicks || 3);
+        if (!r.ok && !silent) sayToOverlay("The scroll didn't work - sorry!", { voice: true });
         return { ok: r.ok };
       }
       case ACTIONS.OPEN: {
         if (!controlAllowed(silent)) return { ok: false, reason: 'disabled' };
         const r = await control.openApp(action.app || '');
-        if (!r.ok && !silent) sayToOverlay(`I couldn't launch "${action.app}".`, { voice: true });
+        if (!r.ok && !silent) {
+          sayToOverlay(r.reason === 'blocked-name'
+            ? 'I only open plain program names, like notepad, calc or spotify.'
+            : `I couldn't launch "${action.app}".`, { voice: true });
+        }
         return { ok: r.ok };
       }
       case ACTIONS.FOLLOW: {
@@ -452,7 +476,8 @@ function startServer() {
   server = new CompanionServer({
     port: config.get('port'),
     code: config.get('pairingCode'),
-    pcName: `Bluey on ${os.hostname().split('.')[0]}`
+    pcName: `Bluey on ${os.hostname().split('.')[0]}`,
+    version: app.getVersion()
   });
   server.on('ptt', async (buf, durMs) => {
     state.lastTalk = Date.now();

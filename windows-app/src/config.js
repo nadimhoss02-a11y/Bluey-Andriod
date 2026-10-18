@@ -5,7 +5,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { app } = require('electron');
+
+const CODE_LENGTH = 6;
 
 const DEFAULTS = {
   // character
@@ -21,6 +24,7 @@ const DEFAULTS = {
   // voice input
   voiceMode: 'ptt',       // 'ptt' (Alt+Space) | 'wake' ("Hey Bluey") | 'off'
   wakeWord: 'hey bluey',  // phrase; she also answers to just her name
+  googleApiKey: '',       // optional: enables Chromium's speech engine for the free wake word (needs a restart)
   // brain
   brain: 'scripted',      // 'scripted' | 'openai'
   openaiKey: '',
@@ -41,19 +45,22 @@ function file() {
   return path.join(app.getPath('userData'), 'config.json');
 }
 
+/** random numeric pairing code from a cryptographic RNG (6 digits) */
 function generateCode() {
-  return String(Math.floor(1000 + Math.random() * 9000));
+  return String(crypto.randomInt(10 ** (CODE_LENGTH - 1), 10 ** CODE_LENGTH));
 }
 
 function load() {
   if (cached) return cached;
   try {
-    const raw = JSON.parse(fs.readFileSync(file(), 'utf8'));
-    cached = Object.assign({}, DEFAULTS, raw);
+    // tolerate a UTF-8 BOM (Notepad / PowerShell add one) - JSON.parse would reject it and reset everything
+    const raw = fs.readFileSync(file(), 'utf8').replace(/^﻿/, '');
+    cached = Object.assign({}, DEFAULTS, JSON.parse(raw));
   } catch (e) {
     cached = Object.assign({}, DEFAULTS);
   }
-  if (!cached.pairingCode) {
+  // first run, or a short code from an older version: (re)generate a strong one
+  if (!/^\d+$/.test(String(cached.pairingCode || '')) || String(cached.pairingCode).length < CODE_LENGTH) {
     cached.pairingCode = generateCode();
     persist();
   }
@@ -85,4 +92,4 @@ function all() {
   return Object.assign({}, load());
 }
 
-module.exports = { get, set, all, DEFAULTS };
+module.exports = { get, set, all, DEFAULTS, CODE_LENGTH };
