@@ -93,10 +93,14 @@
 
   <h2>Brain</h2>
   <div class="row"><label>Offline personality <span class="hint">no key needed</span></label><input type="radio" name="brain" value="scripted" checked></div>
+  <div class="row"><label>Google Gemini <span class="hint">free key, real conversation</span></label><input type="radio" name="brain" value="gemini"></div>
+  <div class="row"><label>Gemini API key <span class="hint">free at aistudio.google.com/apikey (no card)</span></label><input type="password" id="geminiKey" placeholder="AIza..." autocomplete="off"></div>
+  <div class="row"><label>Gemini model <span class="hint">leave empty to choose automatically</span></label><input type="text" id="geminiModel" placeholder="(automatic)"></div>
+  <div class="hint">Free-tier note: Google may use what you say to Bluey to improve its products, and the free tier has daily limits. Only your typed or spoken messages are sent - never your screen.</div>
   <div class="row"><label>OpenAI <span class="hint">voice chat that truly understands</span></label><input type="radio" name="brain" value="openai"></div>
   <div class="row"><label>API key</label><input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off"></div>
   <div class="row"><label>Model</label><input type="text" id="openaiModel" placeholder="gpt-4o-mini"></div>
-  <div class="warn" id="brainNote">Key is stored locally on your PC only. Scripted mode still supports all PC-control commands via chat.</div>
+  <div class="warn" id="brainNote">Keys are stored locally on your PC only. Scripted mode still supports all PC-control commands via chat.</div>
 
   <h2>PC control</h2>
   <div class="row"><label>Let Bluey click / type / scroll / open apps <span class="hint">PowerShell based, Windows 10/11</span></label><input type="checkbox" id="controlEnabled"></div>
@@ -106,7 +110,7 @@
   <div class="row"><label>PC IP address</label><span class="hint" id="pcIP" style="font-size:13px;color:#9db4ff"></span></div>
   <div class="row"><label>Port</label><input type="number" id="port" min="1024" max="65535" style="width:110px"></div>
   <div class="row"><label>Pairing code</label><span class="code" id="pairingCode"></span></div>
-  <div class="hint">On your phone: Bluey app → Pair → pick this PC (same Wi-Fi) or type the IP, then enter the 6-digit code. Keep it private - anyone with it can control this PC. On the Windows Firewall prompt, allow <b>Private</b> networks only.</div>
+  <div class="hint">On your phone: Bluey app → Pair → pick this PC (same Wi-Fi) or type the IP, then enter the 6-digit code. Keep it private - anyone with it can control this PC. On the Windows Firewall prompt, allow <b>Private</b> networks only - and if your Wi-Fi (e.g. a phone hotspot) is marked <i>Public</i>, set it to <i>Private</i> first (Windows Settings → Network &amp; Internet → Wi-Fi), or the phone will time out.</div>
 
   <h2>Meeting notes</h2>
   <div class="row"><label>Notes folder</label><button id="openNotes">Open folder</button></div>
@@ -151,9 +155,11 @@ window.settings.get().then((c) => {
   $('wakeWord').value = c.wakeWord || 'hey bluey';
   $('googleApiKey').value = c.googleApiKey || '';
   if (!('speechSynthesis' in window)) $('voiceName').innerHTML = '<option value="">Default</option>';
-  document.querySelector(`input[name=brain][value=${c.brain === 'openai' ? 'openai' : 'scripted'}]`).checked = true;
+  document.querySelector(`input[name=brain][value=${['openai', 'gemini'].includes(c.brain) ? c.brain : 'scripted'}]`).checked = true;
   $('openaiKey').value = c.openaiKey || '';
   $('openaiModel').value = c.openaiModel || 'gpt-4o-mini';
+  $('geminiKey').value = c.geminiKey || '';
+  $('geminiModel').value = c.geminiModel || '';
   $('controlEnabled').checked = c.controlEnabled;
   $('serverEnabled').checked = c.serverEnabled;
   $('port').value = c.port;
@@ -163,7 +169,11 @@ window.settings.get().then((c) => {
   $('phoneStatus').innerHTML = c.phoneConnected
     ? '<span class="badge ok">phone connected</span>'
     : '<span class="badge off">no phone yet</span>';
-  if (c.brainMode === 'openai' && c.brainError) {
+  if (c.brain === 'gemini' && c.brainMode !== 'gemini') {
+    $('brainNote').textContent = 'Gemini is selected but no key is saved yet, so Bluey is still on the offline brain. Paste your key above and press Save.';
+  } else if (c.brainMode === 'gemini' && c.brainError) {
+    $('brainNote').textContent = 'Gemini problem: ' + c.brainError.slice(0, 160);
+  } else if (c.brainMode === 'openai' && c.brainError) {
     $('brainNote').textContent = 'OpenAI mode had an error (' + c.brainError.slice(0, 80) + ') — falling back to scripted until fixed.';
   }
 });
@@ -172,6 +182,11 @@ $('size').addEventListener('input', () => $('sizeVal').textContent = $('size').v
 $('volume').addEventListener('input', () => $('volumeVal').textContent = $('volume').value + '%');
 
 $('saveBtn').addEventListener('click', () => {
+  // a Gemini key pasted for the first time while "offline personality" is still ticked: obviously meant to be used
+  if ($('geminiKey').value.trim() && !cfg.geminiKey && document.querySelector('input[name=brain]:checked').value === 'scripted') {
+    document.querySelector('input[name=brain][value=gemini]').checked = true;
+  }
+  cfg.geminiKey = $('geminiKey').value.trim();
   window.settings.save({
     size: Number($('size').value),
     glow: $('glow').checked,
@@ -187,6 +202,8 @@ $('saveBtn').addEventListener('click', () => {
     brain: document.querySelector('input[name=brain]:checked').value,
     openaiKey: $('openaiKey').value.trim(),
     openaiModel: $('openaiModel').value.trim() || 'gpt-4o-mini',
+    geminiKey: $('geminiKey').value.trim(),
+    geminiModel: $('geminiModel').value.trim(),
     controlEnabled: $('controlEnabled').checked,
     serverEnabled: $('serverEnabled').checked,
     port: Number($('port').value) || 8787
