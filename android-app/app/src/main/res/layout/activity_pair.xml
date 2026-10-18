@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:layout_marginBottom="18dp"
-            android:text="1. Install Bluey on your Windows PC and make sure phone + PC are on the same Wi-Fi.\n2. Find your PC below (or type its IP — shown in Bluey Settings → Phone companion).\n3. Enter the 4-digit pairing code."
+            android:text="1. Install Bluey on your Windows PC and make sure phone + PC are on the same Wi-Fi.\n2. Find your PC below (or type its IP — shown in Bluey Settings → Phone companion).\n3. Enter the 6-digit pairing code."
             android:textColor="@color/text_dim"
             android:textSize="14sp" />
 
@@ -94,9 +94,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:background="@drawable/card_bg"
-            android:hint="4-digit pairing code (see PC settings)"
+            android:hint="6-digit pairing code (see PC settings)"
             android:inputType="number"
-            android:maxLength="4"
+            android:maxLength="8"
             android:padding="14dp"
             android:textColor="@color/text_main"
             android:textColorHint="@color/text_dim" />
